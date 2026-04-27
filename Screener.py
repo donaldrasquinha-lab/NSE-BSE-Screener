@@ -268,6 +268,32 @@ NSE_SECTOR_URLS = {
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  SESSION STATE INITIALISATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ── Thread-safe scan state ──────────────────────────────────────────────
+# Background thread writes to _SCAN (a plain dict — safe to share).
+# Main thread reads _SCAN and copies finished results to session_state.
+import threading as _threading
+_SCAN: dict = {
+    "running":   False,
+    "progress":  0.0,
+    "msg":       "",
+    "stats":     {"total": 0, "processed": 0, "passed": 0, "perfect": 0},
+    "results":   [],
+    "done":      False,
+    "error":     "",
+    "log":       [],          # full error/warning log visible in UI
+}
+_SCAN_LOCK = _threading.Lock()
+
+def _scan_update(**kw):
+    """Thread-safe write to _SCAN."""
+    with _SCAN_LOCK:
+        for k, v in kw.items():
+            _SCAN[k] = v
+
+def _scan_log(msg: str):
+    with _SCAN_LOCK:
+        _SCAN["log"].append(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
+
 def init_state():
     defaults = {
         "results":        [],
@@ -280,6 +306,10 @@ def init_state():
         "scan_done":      False,
         "exch_filter":    "All",
         "last_scan_time": None,
+        "token_status":   "unknown",   # "unknown" | "valid" | "invalid"
+        "token_user":     "",
+        "download_error": "",
+        "download_log":   [],
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -1035,119 +1065,189 @@ def high52(df: pd.DataFrame) -> float:
 #  SCAN ENGINE  (runs in background thread)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def run_scan_thread(token: str, cfg: dict, uni: list, fd: dict):
-    """Runs in a daemon thread; writes progress to session_state via shared dict."""
-    total   = len(uni)
-    results = []
-    stats   = st.session_state.scan_stats
+    """
+    Runs in a daemon thread.
+    Writes ONLY to the module-level _SCAN dict (thread-safe).
+    Never touches st.session_state — that is NOT thread-safe in Streamlit.
+    """
+    import traceback
+    try:
+        total = len(uni)
+        _scan_update(running=True, done=False, error="", progress=0.0,
+                     results=[], log=[],
+                     stats={"total": total, "processed": 0, "passed": 0, "perfect": 0})
+        _scan_log(f"Scan started: {total} stocks")
 
-    stats.update({"total": total, "processed": 0, "passed": 0, "perfect": 0})
-    st.session_state.scan_running = True
-    st.session_state.scan_done    = False
+        results = []
+        stats   = {"total": total, "processed": 0, "passed": 0, "perfect": 0}
 
-    # Phase 1: Batch LTP
-    st.session_state.scan_msg = "Phase 1/3: Fetching live prices (batch)…"
-    ltp_map = fetch_batch_ltp([u["ikey"] for u in uni], token)
+        # Phase 1: Batch LTP
+        _scan_update(msg="Phase 1/3: Fetching live prices (batch)…")
+        _scan_log("Phase 1: batch LTP fetch")
+        try:
+            ltp_map = fetch_batch_ltp([u["ikey"] for u in uni], token)
+            _scan_log(f"Phase 1 done: {len(ltp_map)} LTPs fetched")
+        except Exception as e:
+            _scan_log(f"Phase 1 warning (LTP batch): {e} — will use last-close prices")
+            ltp_map = {}
 
-    # Phase 2: Sector indices
-    st.session_state.scan_msg = "Phase 2/3: Caching sector index candles…"
-    sec_keys  = list({u["sector"] for u in uni})
-    sec_cache = {}
-    for sk in sec_keys:
-        sec_cache[sk] = fetch_hist(sk, token)
-        time.sleep(0.1)
+        # Phase 2: Sector indices
+        _scan_update(msg="Phase 2/3: Caching sector index candles…")
+        _scan_log("Phase 2: sector index candles")
+        sec_keys  = list({u["sector"] for u in uni})
+        sec_cache = {}
+        for sk in sec_keys:
+            try:
+                sec_cache[sk] = fetch_hist(sk, token)
+            except Exception as e:
+                _scan_log(f"  sector {sk}: {e}")
+                sec_cache[sk] = None
+            time.sleep(0.1)
+        valid_sectors = sum(1 for v in sec_cache.values() if v is not None)
+        _scan_log(f"Phase 2 done: {valid_sectors}/{len(sec_keys)} sector indices OK")
 
-    # Phase 3: Per-stock
-    for i, stk in enumerate(uni):
-        if not st.session_state.get("scan_running", False):
-            break  # cancelled
+        # Phase 3: Per-stock scan
+        _scan_log("Phase 3: per-stock scan starting")
+        for i, stk in enumerate(uni):
+            # Check stop flag
+            with _SCAN_LOCK:
+                if not _SCAN["running"]:
+                    _scan_log("Scan stopped by user")
+                    break
 
-        sym  = stk["sym"]
-        ikey = stk["ikey"]
-        skey = stk["sector"]
+            sym  = stk["sym"]
+            ikey = stk["ikey"]
+            skey = stk["sector"]
 
-        stats["processed"] = i + 1
-        pct = (i + 1) / total
-        st.session_state.scan_progress = pct
-        st.session_state.scan_msg = (
-            f"Phase 3/3: [{i+1}/{total}]  {sym}  — "
-            f"{stats['passed']} passed  {stats['perfect']} perfect"
+            stats["processed"] = i + 1
+            pct = (i + 1) / total
+            _scan_update(
+                progress=pct,
+                stats=dict(stats),
+                msg=f"Phase 3/3: [{i+1}/{total}]  {sym}  — "
+                    f"{stats['passed']} passed  {stats['perfect']} perfect"
+            )
+
+            try:
+                df = fetch_hist(ikey, token)
+            except Exception as e:
+                _scan_log(f"  {sym}: hist fetch error: {e}")
+                continue
+
+            if df is None or len(df) < 30:
+                continue
+
+            try:
+                price = ltp_map.get(ikey) or float(df["C"].iloc[-1])
+                if avg_vol(df) < cfg["min_vol"]:
+                    continue
+
+                h52_ = high52(df)
+                dH   = (price - h52_) / h52_ * 100
+                if dH < -cfg["high_prox"]:
+                    continue
+
+                sd = sec_cache.get(skey)
+                if sd is None or len(sd) < cfg["rs_days"] + 2:
+                    continue
+
+                sp = perf_n(df, cfg["rs_days"])
+                xp = perf_n(sd, cfg["rs_days"])
+                if sp is None or xp is None:
+                    continue
+
+                rs_leader = xp < cfg["sec_drop"] and sp >= cfg.get("stk_min", 0)
+                sm        = sma21(df)
+                dS        = (price - sm) / sm * 100
+                in_bz     = cfg["bz_lo"] <= dS <= cfg["bz_hi"]
+                rsi_v     = rsi14(df)
+
+                fund  = analyse_fund(sym, price, fd)
+                ttm   = fund.get("ttm") or 0
+                pe    = fund.get("pe")
+                yoy   = fund.get("yoy")
+                fs    = fund.get("fs", 0)
+                ac_ok = fund.get("ac", {}).get("ok", False) if fund["av"] else False
+                sr_ok = fund.get("sr", {}).get("ok", False) if fund["av"] else False
+                sq_ok = fund.get("sq", {}).get("ok", False) if fund["av"] else False
+
+                is_perfect = (rs_leader and in_bz
+                              and ttm >= cfg["min_eps"]
+                              and yoy is not None and yoy >= cfg["min_yoy"]
+                              and ac_ok)
+
+                stats["passed"]  += 1
+                stats["perfect"] += int(is_perfect)
+
+                results.append({
+                    "name":     stk["name"],    "sym":    sym,
+                    "sector":   skey.replace("NSE_INDEX|Nifty ","").replace("BSE_INDEX|S&P BSE ",""),
+                    "exch":     stk["exch"],    "price":  round(price, 2),
+                    "high":     round(h52_, 2), "dH":     round(dH, 2),
+                    "sp":       round(sp, 2),   "xp":     round(xp, 2),
+                    "rs_leader":rs_leader,      "sma":    round(sm, 2),
+                    "dS":       round(dS, 2),   "in_bz":  in_bz,
+                    "rsi":      None if math.isnan(rsi_v) else rsi_v,
+                    "eps":      fund.get("eps",[]),   "sales": fund.get("sales",[]),
+                    "ttm":      fund.get("ttm"),       "pe":   pe,
+                    "yoy":      yoy,                   "g":    fund.get("g",[]),
+                    "ac":       fund.get("ac",{}),     "sr":   fund.get("sr",{}),
+                    "sq":       fund.get("sq",{}),
+                    "eps_ok":   ttm >= cfg["min_eps"],
+                    "yoy_ok":   bool(yoy and yoy >= cfg["min_yoy"]),
+                    "ac_ok":    ac_ok, "sr_ok": sr_ok, "sq_ok": sq_ok,
+                    "fs":       fs,    "perfect": is_perfect,
+                })
+            except Exception as e:
+                _scan_log(f"  {sym}: processing error: {e}")
+                continue
+
+            time.sleep(0.05)
+
+        # Sort and finalise
+        sorted_results = sorted(results, key=lambda x: x.get("fs", 0), reverse=True)
+        done_msg = (f"✅ Scan complete — {stats['passed']} passed / {total} total "
+                    f"({stats['perfect']} perfect)")
+        _scan_update(
+            running=False, done=True, progress=1.0,
+            results=sorted_results, stats=dict(stats), msg=done_msg
         )
+        _scan_log(done_msg)
 
-        df = fetch_hist(ikey, token)
-        if df is None or len(df) < 30:
-            continue
+    except Exception as e:
+        err = f"Scan crashed: {e}\n{traceback.format_exc()}"
+        _scan_update(running=False, done=True, error=err, msg=f"❌ {e}")
+        _scan_log(err)
 
-        price = ltp_map.get(ikey) or float(df["C"].iloc[-1])
-        if avg_vol(df) < cfg["min_vol"]:
-            continue
 
-        h52_ = high52(df)
-        dH   = (price - h52_) / h52_ * 100
-        if dH < -cfg["high_prox"]:
-            continue
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  TOKEN VERIFICATION
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def verify_token(token: str) -> dict:
+    """
+    Hit Upstox /v2/user/profile to confirm token is valid.
+    Returns {ok, name, email, error}
+    """
+    try:
+        r = requests.get(
+            f"{UPSTOX_BASE}/user/profile",
+            headers=upstox_hdr(token),
+            timeout=8,
+        )
+        if r.status_code == 200:
+            d = r.json().get("data", {})
+            return {
+                "ok":    True,
+                "name":  d.get("name", d.get("user_name", "User")),
+                "email": d.get("email", ""),
+                "error": "",
+            }
+        else:
+            return {"ok": False, "name": "", "email": "",
+                    "error": f"HTTP {r.status_code}: {r.text[:120]}"}
+    except Exception as e:
+        return {"ok": False, "name": "", "email": "", "error": str(e)}
 
-        sd = sec_cache.get(skey)
-        if sd is None or len(sd) < cfg["rs_days"] + 2:
-            continue
-
-        sp = perf_n(df, cfg["rs_days"])
-        xp = perf_n(sd, cfg["rs_days"])
-        if sp is None or xp is None:
-            continue
-
-        rs_leader = xp < cfg["sec_drop"] and sp >= cfg.get("stk_min", 0)
-        sm        = sma21(df)
-        dS        = (price - sm) / sm * 100
-        in_bz     = cfg["bz_lo"] <= dS <= cfg["bz_hi"]
-        rsi_v     = rsi14(df)
-
-        fund  = analyse_fund(sym, price, fd)
-        ttm   = fund.get("ttm") or 0
-        pe    = fund.get("pe")
-        yoy   = fund.get("yoy")
-        fs    = fund.get("fs", 0)
-        ac_ok = fund.get("ac", {}).get("ok", False) if fund["av"] else False
-        sr_ok = fund.get("sr", {}).get("ok", False) if fund["av"] else False
-        sq_ok = fund.get("sq", {}).get("ok", False) if fund["av"] else False
-
-        is_perfect = (rs_leader and in_bz
-                      and ttm >= cfg["min_eps"]
-                      and yoy is not None and yoy >= cfg["min_yoy"]
-                      and ac_ok)
-
-        stats["passed"]  += 1
-        stats["perfect"] += int(is_perfect)
-
-        results.append({
-            "name":    stk["name"],  "sym":     sym,
-            "sector":  skey.replace("NSE_INDEX|Nifty ","").replace("BSE_INDEX|S&P BSE ",""),
-            "exch":    stk["exch"],  "price":   round(price, 2),
-            "high":    round(h52_, 2), "dH":   round(dH, 2),
-            "sp":      round(sp, 2),  "xp":    round(xp, 2),
-            "rs_leader": rs_leader,   "sma":   round(sm, 2),
-            "dS":      round(dS, 2),  "in_bz": in_bz,
-            "rsi":     None if math.isnan(rsi_v) else rsi_v,
-            "eps":     fund.get("eps", []),   "sales": fund.get("sales", []),
-            "ttm":     fund.get("ttm"),        "pe":    pe,
-            "yoy":     yoy,                    "g":     fund.get("g", []),
-            "ac":      fund.get("ac", {}),     "sr":    fund.get("sr", {}),
-            "sq":      fund.get("sq", {}),
-            "eps_ok":  ttm >= cfg["min_eps"],
-            "yoy_ok":  bool(yoy and yoy >= cfg["min_yoy"]),
-            "ac_ok":   ac_ok, "sr_ok": sr_ok, "sq_ok": sq_ok,
-            "fs":      fs,    "perfect": is_perfect,
-        })
-        time.sleep(0.05)
-
-    st.session_state.results       = sorted(results, key=lambda x: x.get("fs", 0), reverse=True)
-    st.session_state.scan_running  = False
-    st.session_state.scan_done     = True
-    st.session_state.scan_progress = 1.0
-    st.session_state.last_scan_time = datetime.datetime.now().strftime("%d %b %Y  %H:%M IST")
-    st.session_state.scan_msg      = (
-        f"✅ Scan complete — {stats['passed']} passed / {total} total "
-        f"({stats['perfect']} perfect)"
-    )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CHART HELPERS  (Plotly dark theme)
@@ -1483,11 +1583,22 @@ with st.sidebar:
             )
         else:
             bs2 = _batch_status()
-            st.warning(
-                f"⚠️ Stopped: {result.get('error','')}\n"
+            err_msg = (
+                f"⚠️ Download stopped: {result.get('error','')}\n"
                 f"Saved so far: {bs2['count']} batches · {bs2['total_stocks']:,} stocks"
             )
+            st.session_state.download_error = err_msg
+            st.session_state.download_log   = result.get("log", [])
         st.rerun()
+
+    if st.session_state.get("download_error"):
+        st.warning(st.session_state.download_error)
+        if st.session_state.get("download_log"):
+            with st.expander("Download error details"):
+                st.code("\n".join(st.session_state.download_log[-20:]), language=None)
+        if st.button("Clear download error"):
+            st.session_state.download_error = ""
+            st.rerun()
 
     if UNIVERSE_CACHE.exists():
         info = json.loads(UNIVERSE_CACHE.read_text())
@@ -1497,8 +1608,45 @@ with st.sidebar:
 
     # ── Token ─────────────────────────────────────────────────────────────
     st.markdown('<div class="sec-lbl">🔑 Upstox Token</div>', unsafe_allow_html=True)
+
+    # Connection status indicator
+    ts = st.session_state.token_status
+    if ts == "valid":
+        st.markdown(
+            f'<div style="background:rgba(78,207,143,.12);border:1px solid rgba(78,207,143,.3);'
+            f'border-radius:7px;padding:8px 12px;font-size:.72rem;color:var(--sage);margin-bottom:8px">'
+            f'● Connected · {st.session_state.token_user}</div>',
+            unsafe_allow_html=True
+        )
+    elif ts == "invalid":
+        st.markdown(
+            '<div style="background:rgba(240,112,112,.1);border:1px solid rgba(240,112,112,.3);'
+            'border-radius:7px;padding:8px 12px;font-size:.72rem;color:var(--coral);margin-bottom:8px">'
+            f'● Invalid token: {st.session_state.get("token_error","")[:60]}</div>',
+            unsafe_allow_html=True
+        )
+
     token = st.text_input("Access Token", type="password",
                           placeholder="Paste bearer token…", key="token_input")
+
+    if st.button("🔌 Verify Token", use_container_width=True):
+        if token.strip():
+            with st.spinner("Connecting to Upstox…"):
+                vr = verify_token(token.strip())
+            if vr["ok"]:
+                st.session_state.token_status = "valid"
+                st.session_state.token_user   = vr["name"]
+                st.session_state.token_error  = ""
+                st.success(f"✅ Connected as {vr['name']} ({vr['email']})")
+            else:
+                st.session_state.token_status = "invalid"
+                st.session_state.token_user   = ""
+                st.session_state.token_error  = vr["error"]
+                st.error(f"❌ {vr['error']}")
+            st.rerun()
+        else:
+            st.warning("Paste your token first.")
+
     st.caption("① upstox.com/developer → Your App\n② OAuth2 flow → copy access_token\n③ Valid for 1 trading day")
 
     st.divider()
@@ -1583,13 +1731,18 @@ if run_btn:
     if not token:
         st.error("⚠️ Please enter your Upstox Access Token in the sidebar.")
         st.stop()
-    uni_now = load_universe_cache()  # always returns at least DEFAULT_UNIVERSE (500 NSE + 500 BSE)
+    uni_now = load_universe_cache()  # always returns DEFAULT_UNIVERSE at minimum
+    fd      = get_fundamentals()
+    # Reset shared scan state
+    _scan_update(running=True, done=False, error="", progress=0.0,
+                 results=[], log=[], msg="Starting…",
+                 stats={"total": len(uni_now), "processed": 0, "passed": 0, "perfect": 0})
+    # Reset session state flags
     st.session_state.results       = []
     st.session_state.scan_running  = True
     st.session_state.scan_done     = False
     st.session_state.scan_progress = 0.0
-    fd = get_fundamentals()
-    t  = threading.Thread(
+    t = threading.Thread(
         target=run_scan_thread,
         args=(token, cfg, uni_now, fd),
         daemon=True,
@@ -1600,25 +1753,68 @@ if run_btn:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  PROGRESS BAR  (auto-refreshes while scanning)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ── Sync _SCAN → session_state (safe: main thread only) ──────────────────
 if st.session_state.scan_running:
-    stats = st.session_state.scan_stats
-    pct   = st.session_state.scan_progress
-    st.markdown("""<div class="prog-box">
-      <div class="plbl">● SCANNING</div></div>""", unsafe_allow_html=True)
-    st.progress(min(pct, 1.0))
-    st.caption(st.session_state.scan_msg)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total",     stats.get("total", 0))
-    c2.metric("Processed", stats.get("processed", 0))
-    c3.metric("Passed",    stats.get("passed", 0))
-    c4.metric("⭐ Perfect", stats.get("perfect", 0))
-    time.sleep(2)
-    st.rerun()
+    with _SCAN_LOCK:
+        snap = dict(_SCAN)          # read snapshot under lock
+
+    pct   = snap["progress"]
+    stats = snap["stats"]
+    msg   = snap["msg"]
+    done  = snap["done"]
+    err   = snap["error"]
+
+    if done:
+        # Scan finished (or crashed) — copy results to session_state
+        st.session_state.scan_running   = False
+        st.session_state.scan_done      = True
+        st.session_state.results        = snap["results"]
+        st.session_state.scan_progress  = 1.0
+        st.session_state.last_scan_time = datetime.datetime.now().strftime("%d %b %Y  %H:%M IST")
+        if err:
+            st.session_state.scan_error = err
+        st.rerun()
+    else:
+        # Still running — show live progress
+        st.markdown('<div class="prog-box"><div class="plbl scanning">● SCANNING</div></div>',
+                    unsafe_allow_html=True)
+        st.progress(min(float(pct), 1.0))
+        st.caption(msg)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total",     stats.get("total", 0))
+        c2.metric("Processed", stats.get("processed", 0))
+        c3.metric("Passed",    stats.get("passed", 0))
+        c4.metric("⭐ Perfect", stats.get("perfect", 0))
+
+        # Show scan log in expander (live debugging)
+        log_lines = snap.get("log", [])
+        if log_lines:
+            with st.expander(f"📋 Scan Log ({len(log_lines)} entries)", expanded=False):
+                st.code("\n".join(log_lines[-30:]), language=None)
+
+        time.sleep(2)
+        st.rerun()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  RESULTS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 results = st.session_state.results
+
+# Show any scan error that occurred
+if st.session_state.get("scan_error"):
+    with st.expander("❌ Scan Error Log", expanded=True):
+        st.code(st.session_state.scan_error, language=None)
+    if st.button("Clear Error"):
+        st.session_state.scan_error = ""
+        st.rerun()
+
+# Show scan log from _SCAN after completion
+if st.session_state.scan_done and not st.session_state.scan_running:
+    with _SCAN_LOCK:
+        log_snap = list(_SCAN.get("log", []))
+    if log_snap:
+        with st.expander(f"📋 Last Scan Log ({len(log_snap)} entries)", expanded=False):
+            st.code("\n".join(log_snap), language=None)
 
 if not results and not st.session_state.scan_running:
     # ── Welcome screen ────────────────────────────────────────────────────
