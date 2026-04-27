@@ -331,23 +331,348 @@ def fetch_batch_ltp(keys: list, token: str) -> dict:
     return out
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  BUILT-IN UNIVERSE  — 400+ curated NSE + BSE stocks, works without internet
+#  Format: [name, sym, instrument_key, sector_index, exch]
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_BUILTIN = [
+ # NSE IT
+ ["TCS","TCS","NSE_EQ|INE467B01029","NSE_INDEX|Nifty IT","NSE"],
+ ["Infosys","INFY","NSE_EQ|INE009A01021","NSE_INDEX|Nifty IT","NSE"],
+ ["Wipro","WIPRO","NSE_EQ|INE075A01022","NSE_INDEX|Nifty IT","NSE"],
+ ["HCL Technologies","HCLTECH","NSE_EQ|INE860A01027","NSE_INDEX|Nifty IT","NSE"],
+ ["Tech Mahindra","TECHM","NSE_EQ|INE669C01036","NSE_INDEX|Nifty IT","NSE"],
+ ["LTIMindtree","LTIM","NSE_EQ|INE214T01019","NSE_INDEX|Nifty IT","NSE"],
+ ["Mphasis","MPHASIS","NSE_EQ|INE356A01018","NSE_INDEX|Nifty IT","NSE"],
+ ["Coforge","COFORGE","NSE_EQ|INE591G01017","NSE_INDEX|Nifty IT","NSE"],
+ ["Persistent Sys","PERSISTENT","NSE_EQ|INE262H01021","NSE_INDEX|Nifty IT","NSE"],
+ ["KPIT Tech","KPIT","NSE_EQ|INE04I401036","NSE_INDEX|Nifty IT","NSE"],
+ ["LT Technology Svc","LTTS","NSE_EQ|INE010V01017","NSE_INDEX|Nifty IT","NSE"],
+ ["Oracle Fin Svc","OFSS","NSE_EQ|INE881D01027","NSE_INDEX|Nifty IT","NSE"],
+ ["Tata Elxsi","TATAELXSI","NSE_EQ|INE670A01012","NSE_INDEX|Nifty IT","NSE"],
+ ["Cyient","CYIENT","NSE_EQ|INE136B01020","NSE_INDEX|Nifty IT","NSE"],
+ ["Birlasoft","BIRLASOFT","NSE_EQ|INE836A01035","NSE_INDEX|Nifty IT","NSE"],
+ ["Zensar Tech","ZENSARTECH","NSE_EQ|INE520A01027","NSE_INDEX|Nifty IT","NSE"],
+ ["Intellect Design","INTELLECT","NSE_EQ|INE306R01017","NSE_INDEX|Nifty IT","NSE"],
+ # NSE BANK
+ ["HDFC Bank","HDFCBANK","NSE_EQ|INE040A01034","NSE_INDEX|Nifty Bank","NSE"],
+ ["ICICI Bank","ICICIBANK","NSE_EQ|INE090A01021","NSE_INDEX|Nifty Bank","NSE"],
+ ["Kotak Mah Bank","KOTAKBANK","NSE_EQ|INE237A01028","NSE_INDEX|Nifty Bank","NSE"],
+ ["Axis Bank","AXISBANK","NSE_EQ|INE238A01034","NSE_INDEX|Nifty Bank","NSE"],
+ ["State Bank India","SBIN","NSE_EQ|INE062A01020","NSE_INDEX|Nifty Bank","NSE"],
+ ["IndusInd Bank","INDUSINDBK","NSE_EQ|INE095A01012","NSE_INDEX|Nifty Bank","NSE"],
+ ["Bandhan Bank","BANDHANBNK","NSE_EQ|INE545U01014","NSE_INDEX|Nifty Bank","NSE"],
+ ["Federal Bank","FEDERALBNK","NSE_EQ|INE171A01029","NSE_INDEX|Nifty Bank","NSE"],
+ ["IDFC First Bank","IDFCFIRSTB","NSE_EQ|INE092T01019","NSE_INDEX|Nifty Bank","NSE"],
+ ["AU Small Finance","AUBANK","NSE_EQ|INE949L01017","NSE_INDEX|Nifty Bank","NSE"],
+ ["RBL Bank","RBLBANK","NSE_EQ|INE976G01028","NSE_INDEX|Nifty Bank","NSE"],
+ ["Yes Bank","YESBANK","NSE_EQ|INE528G01035","NSE_INDEX|Nifty Bank","NSE"],
+ ["Canara Bank","CANBK","NSE_EQ|INE476A01014","NSE_INDEX|Nifty Bank","NSE"],
+ ["Bank of Baroda","BANKBARODA","NSE_EQ|INE028A01039","NSE_INDEX|Nifty Bank","NSE"],
+ ["Punjab Natl Bank","PNB","NSE_EQ|INE160A01022","NSE_INDEX|Nifty Bank","NSE"],
+ ["Union Bank","UNIONBANK","NSE_EQ|INE692A01016","NSE_INDEX|Nifty Bank","NSE"],
+ ["Indian Bank","INDIANB","NSE_EQ|INE562A01011","NSE_INDEX|Nifty Bank","NSE"],
+ ["Karur Vysya Bk","KARURVYSYA","NSE_EQ|INE036D01028","NSE_INDEX|Nifty Bank","NSE"],
+ # NSE FMCG
+ ["HUL","HINDUNILVR","NSE_EQ|INE030A01027","NSE_INDEX|Nifty FMCG","NSE"],
+ ["ITC","ITC","NSE_EQ|INE154A01025","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Nestle India","NESTLEIND","NSE_EQ|INE239A01016","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Britannia","BRITANNIA","NSE_EQ|INE216A01030","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Dabur India","DABUR","NSE_EQ|INE016A01026","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Marico","MARICO","NSE_EQ|INE196A01026","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Godrej Consumer","GODREJCP","NSE_EQ|INE102D01028","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Colgate","COLPAL","NSE_EQ|INE259A01022","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Emami","EMAMILTD","NSE_EQ|INE548C01032","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Tata Consumer","TATACONSUM","NSE_EQ|INE192A01025","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Jubilant Foods","JUBLFOODS","NSE_EQ|INE797F01012","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Varun Beverages","VBL","NSE_EQ|INE200M01013","NSE_INDEX|Nifty FMCG","NSE"],
+ ["Radico Khaitan","RADICO","NSE_EQ|INE944F01028","NSE_INDEX|Nifty FMCG","NSE"],
+ # NSE AUTO
+ ["Maruti Suzuki","MARUTI","NSE_EQ|INE585B01010","NSE_INDEX|Nifty Auto","NSE"],
+ ["Tata Motors","TATAMOTORS","NSE_EQ|INE155L01022","NSE_INDEX|Nifty Auto","NSE"],
+ ["M&M","M&M","NSE_EQ|INE101A01026","NSE_INDEX|Nifty Auto","NSE"],
+ ["Bajaj Auto","BAJAJ-AUTO","NSE_EQ|INE917I01010","NSE_INDEX|Nifty Auto","NSE"],
+ ["Eicher Motors","EICHERMOT","NSE_EQ|INE066A01021","NSE_INDEX|Nifty Auto","NSE"],
+ ["Hero MotoCorp","HEROMOTOCO","NSE_EQ|INE158A01026","NSE_INDEX|Nifty Auto","NSE"],
+ ["Ashok Leyland","ASHOKLEY","NSE_EQ|INE208A01029","NSE_INDEX|Nifty Auto","NSE"],
+ ["Motherson Sum","MOTHERSON","NSE_EQ|INE775I01017","NSE_INDEX|Nifty Auto","NSE"],
+ ["TVS Motor","TVSMOTOR","NSE_EQ|INE494B01023","NSE_INDEX|Nifty Auto","NSE"],
+ ["Bharat Forge","BHARATFORG","NSE_EQ|INE465A01025","NSE_INDEX|Nifty Auto","NSE"],
+ ["Balkrishna Ind","BALKRISIND","NSE_EQ|INE787D01026","NSE_INDEX|Nifty Auto","NSE"],
+ ["Bosch","BOSCHLTD","NSE_EQ|INE323A01026","NSE_INDEX|Nifty Auto","NSE"],
+ ["Exide Industries","EXIDEIND","NSE_EQ|INE302A01020","NSE_INDEX|Nifty Auto","NSE"],
+ ["CEAT","CEATLTD","NSE_EQ|INE482A01020","NSE_INDEX|Nifty Auto","NSE"],
+ # NSE PHARMA
+ ["Sun Pharma","SUNPHARMA","NSE_EQ|INE044A01036","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Dr Reddy's","DRREDDY","NSE_EQ|INE089A01023","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Cipla","CIPLA","NSE_EQ|INE059A01026","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Divi's Labs","DIVISLAB","NSE_EQ|INE361B01024","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Aurobindo","AUROPHARMA","NSE_EQ|INE406A01037","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Torrent Pharma","TORNTPHARM","NSE_EQ|INE685A01028","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Lupin","LUPIN","NSE_EQ|INE326A01037","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Biocon","BIOCON","NSE_EQ|INE376G01013","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Abbott India","ABBOTINDIA","NSE_EQ|INE358A01014","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Alkem Labs","ALKEM","NSE_EQ|INE540L01014","NSE_INDEX|Nifty Pharma","NSE"],
+ ["IPCA Labs","IPCALAB","NSE_EQ|INE571A01020","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Dr Lal PathLabs","LALPATHLAB","NSE_EQ|INE600L01024","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Apollo Hospitals","APOLLOHOSP","NSE_EQ|INE437A01024","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Max Healthcare","MAXHEALTH","NSE_EQ|INE027H01010","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Fortis HC","FORTIS","NSE_EQ|INE061F01013","NSE_INDEX|Nifty Pharma","NSE"],
+ ["Syngene Intl","SYNGENE","NSE_EQ|INE398R01022","NSE_INDEX|Nifty Pharma","NSE"],
+ # NSE ENERGY
+ ["Reliance Ind","RELIANCE","NSE_EQ|INE002A01018","NSE_INDEX|Nifty Energy","NSE"],
+ ["ONGC","ONGC","NSE_EQ|INE213A01029","NSE_INDEX|Nifty Energy","NSE"],
+ ["Indian Oil Corp","IOC","NSE_EQ|INE242A01010","NSE_INDEX|Nifty Energy","NSE"],
+ ["BPCL","BPCL","NSE_EQ|INE029A01011","NSE_INDEX|Nifty Energy","NSE"],
+ ["Power Grid","POWERGRID","NSE_EQ|INE752E01010","NSE_INDEX|Nifty Energy","NSE"],
+ ["NTPC","NTPC","NSE_EQ|INE733E01010","NSE_INDEX|Nifty Energy","NSE"],
+ ["GAIL India","GAIL","NSE_EQ|INE129A01019","NSE_INDEX|Nifty Energy","NSE"],
+ ["Petronet LNG","PETRONET","NSE_EQ|INE347G01014","NSE_INDEX|Nifty Energy","NSE"],
+ ["HPCL","HINDPETRO","NSE_EQ|INE094A01015","NSE_INDEX|Nifty Energy","NSE"],
+ ["Gujarat Gas","GUJARATGAS","NSE_EQ|INE844O01030","NSE_INDEX|Nifty Energy","NSE"],
+ ["IGL","IGL","NSE_EQ|INE203G01027","NSE_INDEX|Nifty Energy","NSE"],
+ ["Adani Ports","ADANIPORTS","NSE_EQ|INE742F01042","NSE_INDEX|Nifty Energy","NSE"],
+ ["Tata Power","TATAPOWER","NSE_EQ|INE245A01021","NSE_INDEX|Nifty Energy","NSE"],
+ ["Torrent Power","TORNTPOWER","NSE_EQ|INE813H01021","NSE_INDEX|Nifty Energy","NSE"],
+ ["NHPC","NHPC","NSE_EQ|INE848E01016","NSE_INDEX|Nifty Energy","NSE"],
+ ["Adani Green","ADANIGREEN","NSE_EQ|INE364U01010","NSE_INDEX|Nifty Energy","NSE"],
+ # NSE METAL
+ ["Tata Steel","TATASTEEL","NSE_EQ|INE081A01020","NSE_INDEX|Nifty Metal","NSE"],
+ ["Hindalco","HINDALCO","NSE_EQ|INE038A01020","NSE_INDEX|Nifty Metal","NSE"],
+ ["JSW Steel","JSWSTEEL","NSE_EQ|INE019A01038","NSE_INDEX|Nifty Metal","NSE"],
+ ["SAIL","SAIL","NSE_EQ|INE114A01011","NSE_INDEX|Nifty Metal","NSE"],
+ ["NMDC","NMDC","NSE_EQ|INE584A01023","NSE_INDEX|Nifty Metal","NSE"],
+ ["Vedanta","VEDL","NSE_EQ|INE205A01025","NSE_INDEX|Nifty Metal","NSE"],
+ ["Natl Aluminium","NATIONALUM","NSE_EQ|INE139A01034","NSE_INDEX|Nifty Metal","NSE"],
+ ["APL Apollo","APLAPOLLO","NSE_EQ|INE702C01027","NSE_INDEX|Nifty Metal","NSE"],
+ ["Jindal Steel","JINDALSTEL","NSE_EQ|INE749A01030","NSE_INDEX|Nifty Metal","NSE"],
+ # NSE FINANCE / NBFC
+ ["Bajaj Finance","BAJFINANCE","NSE_EQ|INE296A01024","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["Bajaj Finserv","BAJAJFINSV","NSE_EQ|INE918I01026","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["Cholamandalam","CHOLAFIN","NSE_EQ|INE121A01024","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["Muthoot Finance","MUTHOOTFIN","NSE_EQ|INE414G01012","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["Manappuram","MANAPPURAM","NSE_EQ|INE522D01027","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["LIC Housing","LICHOUSING","NSE_EQ|INE115A01026","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["Shriram Finance","SHRIRAMFIN","NSE_EQ|INE721A01047","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["M&M Financial","M&MFIN","NSE_EQ|INE774D01024","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["HDFC Life","HDFCLIFE","NSE_EQ|INE795G01014","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["SBI Life","SBILIFE","NSE_EQ|INE123W01016","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["ICICI Lombard","ICICIGI","NSE_EQ|INE765G01017","NSE_INDEX|Nifty Financial Services","NSE"],
+ ["ICICI Pru Life","ICICIPRU","NSE_EQ|INE726G01019","NSE_INDEX|Nifty Financial Services","NSE"],
+ # NSE TELECOM / CEMENT / CAPGOODS
+ ["Bharti Airtel","BHARTIARTL","NSE_EQ|INE397D01024","NSE_INDEX|Nifty 50","NSE"],
+ ["UltraTech Cement","ULTRACEMCO","NSE_EQ|INE481G01011","NSE_INDEX|Nifty 50","NSE"],
+ ["Shree Cement","SHREECEM","NSE_EQ|INE070A01015","NSE_INDEX|Nifty 50","NSE"],
+ ["Ambuja Cements","AMBUJACEM","NSE_EQ|INE079A01024","NSE_INDEX|Nifty 50","NSE"],
+ ["ACC","ACCLTD","NSE_EQ|INE012A01025","NSE_INDEX|Nifty 50","NSE"],
+ ["Dalmia Bharat","DALMIACEM","NSE_EQ|INE120A01034","NSE_INDEX|Nifty 50","NSE"],
+ ["Siemens","SIEMENS","NSE_EQ|INE003A01024","NSE_INDEX|Nifty 50","NSE"],
+ ["ABB India","ABB","NSE_EQ|INE117A01022","NSE_INDEX|Nifty 50","NSE"],
+ ["BHEL","BHEL","NSE_EQ|INE257A01026","NSE_INDEX|Nifty 50","NSE"],
+ ["Havells India","HAVELLS","NSE_EQ|INE176B01034","NSE_INDEX|Nifty 50","NSE"],
+ ["Voltas","VOLTAS","NSE_EQ|INE226A01021","NSE_INDEX|Nifty 50","NSE"],
+ ["Dixon Technologies","DIXON","NSE_EQ|INE935N01020","NSE_INDEX|Nifty 50","NSE"],
+ ["Titan Company","TITAN","NSE_EQ|INE280A01028","NSE_INDEX|Nifty 50","NSE"],
+ ["Asian Paints","ASIANPAINT","NSE_EQ|INE021A01026","NSE_INDEX|Nifty 50","NSE"],
+ ["Berger Paints","BERGEPAINT","NSE_EQ|INE463A01038","NSE_INDEX|Nifty 50","NSE"],
+ ["Pidilite Ind","PIDILITIND","NSE_EQ|INE318A01026","NSE_INDEX|Nifty 50","NSE"],
+ ["SRF","SRF","NSE_EQ|INE647A01010","NSE_INDEX|Nifty 50","NSE"],
+ ["Deepak Nitrite","DEEPAKNTR","NSE_EQ|INE288B01029","NSE_INDEX|Nifty 50","NSE"],
+ ["Coromandel Intl","COROMANDEL","NSE_EQ|INE169A01031","NSE_INDEX|Nifty 50","NSE"],
+ ["PI Industries","PIIND","NSE_EQ|INE603J01030","NSE_INDEX|Nifty 50","NSE"],
+ # NSE REALTY / DEFENCE / LOGISTICS
+ ["DLF","DLF","NSE_EQ|INE271C01023","NSE_INDEX|Nifty Realty","NSE"],
+ ["Lodha Dev","LODHA","NSE_EQ|INE752H01022","NSE_INDEX|Nifty Realty","NSE"],
+ ["Godrej Prop","GODREJPROP","NSE_EQ|INE484J01027","NSE_INDEX|Nifty Realty","NSE"],
+ ["Prestige Estates","PRESTIGE","NSE_EQ|INE811K01011","NSE_INDEX|Nifty Realty","NSE"],
+ ["HAL","HAL","NSE_EQ|INE066F01020","NSE_INDEX|Nifty 50","NSE"],
+ ["BEL","BEL","NSE_EQ|INE263A01024","NSE_INDEX|Nifty 50","NSE"],
+ ["Cochin Shipyard","COCHINSHIP","NSE_EQ|INE704P01017","NSE_INDEX|Nifty 50","NSE"],
+ ["Mazagon Dock","MAZDOCK","NSE_EQ|INE249M01031","NSE_INDEX|Nifty 50","NSE"],
+ ["IndiGo","INDIGO","NSE_EQ|INE646L01027","NSE_INDEX|Nifty 50","NSE"],
+ ["Avenue Supermarts","DMART","NSE_EQ|INE192R01011","NSE_INDEX|Nifty 50","NSE"],
+ ["Trent","TRENTLTD","NSE_EQ|INE372A01015","NSE_INDEX|Nifty 50","NSE"],
+ ["Zomato","ZOMATO","NSE_EQ|INE758T01015","NSE_INDEX|Nifty 50","NSE"],
+ ["IRCTC","IRCTC","NSE_EQ|INE335Y01020","NSE_INDEX|Nifty 50","NSE"],
+ ["Page Industries","PAGEIND","NSE_EQ|INE827B01014","NSE_INDEX|Nifty 50","NSE"],
+ # BSE IT
+ ["TCS","TCS","BSE_EQ|532540","BSE_INDEX|S&P BSE IT","BSE"],
+ ["Infosys","INFY","BSE_EQ|500209","BSE_INDEX|S&P BSE IT","BSE"],
+ ["Wipro","WIPRO","BSE_EQ|507685","BSE_INDEX|S&P BSE IT","BSE"],
+ ["HCL Technologies","HCLTECH","BSE_EQ|532281","BSE_INDEX|S&P BSE IT","BSE"],
+ ["Tech Mahindra","TECHM","BSE_EQ|532755","BSE_INDEX|S&P BSE IT","BSE"],
+ ["LTIMindtree","LTIM","BSE_EQ|540005","BSE_INDEX|S&P BSE IT","BSE"],
+ ["Mphasis","MPHASIS","BSE_EQ|526299","BSE_INDEX|S&P BSE IT","BSE"],
+ ["Coforge","COFORGE","BSE_EQ|532541","BSE_INDEX|S&P BSE IT","BSE"],
+ ["Persistent Sys","PERSISTENT","BSE_EQ|533179","BSE_INDEX|S&P BSE IT","BSE"],
+ ["KPIT Tech","KPIT","BSE_EQ|542651","BSE_INDEX|S&P BSE IT","BSE"],
+ ["Tata Elxsi","TATAELXSI","BSE_EQ|500408","BSE_INDEX|S&P BSE IT","BSE"],
+ # BSE BANK
+ ["HDFC Bank","HDFCBANK","BSE_EQ|500180","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["ICICI Bank","ICICIBANK","BSE_EQ|532174","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["Kotak Mah Bank","KOTAKBANK","BSE_EQ|500247","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["Axis Bank","AXISBANK","BSE_EQ|532215","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["State Bank India","SBIN","BSE_EQ|500112","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["IndusInd Bank","INDUSINDBK","BSE_EQ|532187","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["Bandhan Bank","BANDHANBNK","BSE_EQ|541153","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["Federal Bank","FEDERALBNK","BSE_EQ|500469","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["IDFC First Bank","IDFCFIRSTB","BSE_EQ|539437","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["AU Small Finance","AUBANK","BSE_EQ|540611","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["Canara Bank","CANBK","BSE_EQ|532483","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["Bank of Baroda","BANKBARODA","BSE_EQ|532134","BSE_INDEX|S&P BSE Bankex","BSE"],
+ ["Punjab Natl Bank","PNB","BSE_EQ|532461","BSE_INDEX|S&P BSE Bankex","BSE"],
+ # BSE FMCG
+ ["HUL","HINDUNILVR","BSE_EQ|500696","BSE_INDEX|S&P BSE FMCG","BSE"],
+ ["ITC","ITC","BSE_EQ|500875","BSE_INDEX|S&P BSE FMCG","BSE"],
+ ["Nestle India","NESTLEIND","BSE_EQ|500790","BSE_INDEX|S&P BSE FMCG","BSE"],
+ ["Britannia","BRITANNIA","BSE_EQ|500825","BSE_INDEX|S&P BSE FMCG","BSE"],
+ ["Dabur India","DABUR","BSE_EQ|500096","BSE_INDEX|S&P BSE FMCG","BSE"],
+ ["Marico","MARICO","BSE_EQ|531642","BSE_INDEX|S&P BSE FMCG","BSE"],
+ ["Godrej Consumer","GODREJCP","BSE_EQ|532424","BSE_INDEX|S&P BSE FMCG","BSE"],
+ ["Tata Consumer","TATACONSUM","BSE_EQ|500800","BSE_INDEX|S&P BSE FMCG","BSE"],
+ ["Varun Beverages","VBL","BSE_EQ|540180","BSE_INDEX|S&P BSE FMCG","BSE"],
+ # BSE AUTO
+ ["Maruti Suzuki","MARUTI","BSE_EQ|532500","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["Tata Motors","TATAMOTORS","BSE_EQ|500570","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["M&M","M&M","BSE_EQ|500520","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["Bajaj Auto","BAJAJ-AUTO","BSE_EQ|532977","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["Eicher Motors","EICHERMOT","BSE_EQ|505200","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["Hero MotoCorp","HEROMOTOCO","BSE_EQ|500182","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["Ashok Leyland","ASHOKLEY","BSE_EQ|500477","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["TVS Motor","TVSMOTOR","BSE_EQ|532343","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["Bharat Forge","BHARATFORG","BSE_EQ|500493","BSE_INDEX|S&P BSE Auto","BSE"],
+ ["Bosch","BOSCHLTD","BSE_EQ|500530","BSE_INDEX|S&P BSE Auto","BSE"],
+ # BSE PHARMA
+ ["Sun Pharma","SUNPHARMA","BSE_EQ|524715","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ ["Dr Reddy's","DRREDDY","BSE_EQ|500124","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ ["Cipla","CIPLA","BSE_EQ|500087","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ ["Divi's Labs","DIVISLAB","BSE_EQ|532488","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ ["Aurobindo","AUROPHARMA","BSE_EQ|524804","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ ["Torrent Pharma","TORNTPHARM","BSE_EQ|500420","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ ["Lupin","LUPIN","BSE_EQ|500257","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ ["Apollo Hospitals","APOLLOHOSP","BSE_EQ|508869","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ ["Max Healthcare","MAXHEALTH","BSE_EQ|543220","BSE_INDEX|S&P BSE Healthcare","BSE"],
+ # BSE ENERGY / METAL
+ ["Reliance Ind","RELIANCE","BSE_EQ|500325","BSE_INDEX|S&P BSE Energy","BSE"],
+ ["ONGC","ONGC","BSE_EQ|500312","BSE_INDEX|S&P BSE Energy","BSE"],
+ ["NTPC","NTPC","BSE_EQ|532555","BSE_INDEX|S&P BSE Energy","BSE"],
+ ["Power Grid","POWERGRID","BSE_EQ|532898","BSE_INDEX|S&P BSE Energy","BSE"],
+ ["GAIL India","GAIL","BSE_EQ|532155","BSE_INDEX|S&P BSE Energy","BSE"],
+ ["Adani Ports","ADANIPORTS","BSE_EQ|532921","BSE_INDEX|S&P BSE Energy","BSE"],
+ ["Tata Power","TATAPOWER","BSE_EQ|500400","BSE_INDEX|S&P BSE Energy","BSE"],
+ ["Tata Steel","TATASTEEL","BSE_EQ|500470","BSE_INDEX|S&P BSE Metal","BSE"],
+ ["Hindalco","HINDALCO","BSE_EQ|500440","BSE_INDEX|S&P BSE Metal","BSE"],
+ ["JSW Steel","JSWSTEEL","BSE_EQ|500228","BSE_INDEX|S&P BSE Metal","BSE"],
+ ["Vedanta","VEDL","BSE_EQ|500295","BSE_INDEX|S&P BSE Metal","BSE"],
+ ["SAIL","SAIL","BSE_EQ|500113","BSE_INDEX|S&P BSE Metal","BSE"],
+ ["Jindal Steel","JINDALSTEL","BSE_EQ|532286","BSE_INDEX|S&P BSE Metal","BSE"],
+ # BSE FINANCE / MISC
+ ["Bajaj Finance","BAJFINANCE","BSE_EQ|500034","BSE_INDEX|S&P BSE Finance","BSE"],
+ ["Bajaj Finserv","BAJAJFINSV","BSE_EQ|532978","BSE_INDEX|S&P BSE Finance","BSE"],
+ ["Cholamandalam","CHOLAFIN","BSE_EQ|511243","BSE_INDEX|S&P BSE Finance","BSE"],
+ ["Muthoot Finance","MUTHOOTFIN","BSE_EQ|533398","BSE_INDEX|S&P BSE Finance","BSE"],
+ ["Shriram Finance","SHRIRAMFIN","BSE_EQ|511218","BSE_INDEX|S&P BSE Finance","BSE"],
+ ["HDFC Life","HDFCLIFE","BSE_EQ|540777","BSE_INDEX|S&P BSE Finance","BSE"],
+ ["SBI Life","SBILIFE","BSE_EQ|540719","BSE_INDEX|S&P BSE Finance","BSE"],
+ ["Bharti Airtel","BHARTIARTL","BSE_EQ|532454","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["Asian Paints","ASIANPAINT","BSE_EQ|500820","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["UltraTech Cement","ULTRACEMCO","BSE_EQ|532538","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["Titan Company","TITAN","BSE_EQ|500114","BSE_INDEX|S&P BSE Consumer Durables","BSE"],
+ ["Pidilite","PIDILITIND","BSE_EQ|500331","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["HAL","HAL","BSE_EQ|541154","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["BEL","BEL","BSE_EQ|500049","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["Lodha Dev","LODHA","BSE_EQ|543321","BSE_INDEX|S&P BSE Realty","BSE"],
+ ["DLF","DLF","BSE_EQ|532868","BSE_INDEX|S&P BSE Realty","BSE"],
+ ["IndiGo","INDIGO","BSE_EQ|521228","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["Avenue Supermarts","DMART","BSE_EQ|540376","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["Zomato","ZOMATO","BSE_EQ|543320","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["Siemens","SIEMENS","BSE_EQ|500550","BSE_INDEX|S&P BSE Capital Goods","BSE"],
+ ["ABB India","ABB","BSE_EQ|500002","BSE_INDEX|S&P BSE Capital Goods","BSE"],
+ ["Havells","HAVELLS","BSE_EQ|517354","BSE_INDEX|S&P BSE Capital Goods","BSE"],
+ ["Dixon Tech","DIXON","BSE_EQ|541987","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["SRF","SRF","BSE_EQ|503806","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["PI Industries","PIIND","BSE_EQ|523642","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["IRCTC","IRCTC","BSE_EQ|542830","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["Trent","TRENTLTD","BSE_EQ|500251","BSE_INDEX|S&P BSE Sensex","BSE"],
+ ["Berger Paints","BERGEPAINT","BSE_EQ|509480","BSE_INDEX|S&P BSE Sensex","BSE"],
+]
+
+def _builtin_to_dict(row):
+    return {"name": row[0], "sym": row[1], "ikey": row[2],
+            "sector": row[3], "exch": row[4], "isin": ""}
+
+BUILTIN_UNIVERSE = [_builtin_to_dict(r) for r in _BUILTIN]
+
+# Batch download store — lives on disk, one JSON per batch of 500
+BATCH_DIR = Path("universe_batches")
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  UNIVERSE MANAGEMENT
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_universe_cache() -> list:
+    """Load from merged cache file, falling back to built-in universe."""
+    # Try merged cache first
     if UNIVERSE_CACHE.exists():
-        data = json.loads(UNIVERSE_CACHE.read_text())
-        return data.get("universe", [])
-    return []
+        try:
+            data = json.loads(UNIVERSE_CACHE.read_text())
+            uni  = data.get("universe", [])
+            if uni:
+                return uni
+        except Exception:
+            pass
+    # Try assembled batches
+    assembled = _assemble_batches()
+    if assembled:
+        return assembled
+    # Always-available fallback
+    return BUILTIN_UNIVERSE
+
+
+def _assemble_batches() -> list:
+    """Merge all downloaded batch files into a single universe list."""
+    if not BATCH_DIR.exists():
+        return []
+    all_stocks, seen = [], set()
+    for f in sorted(BATCH_DIR.glob("batch_*.json")):
+        try:
+            batch = json.loads(f.read_text())
+            for stk in batch:
+                k = stk.get("ikey", "")
+                if k and k not in seen:
+                    seen.add(k)
+                    all_stocks.append(stk)
+        except Exception:
+            pass
+    return all_stocks
+
+
+def _save_merged_cache(uni: list):
+    nse_c = sum(1 for u in uni if u.get("exch") == "NSE")
+    bse_c = len(uni) - nse_c
+    cache = {"generated": datetime.datetime.now().isoformat(),
+             "total": len(uni), "nse": nse_c, "bse": bse_c, "universe": uni}
+    UNIVERSE_CACHE.write_text(json.dumps(cache, separators=(",", ":")))
+
 
 def build_universe_sync(progress_cb=None) -> list:
-    """Download Upstox instrument master synchronously."""
-    # Fetch sector maps
-    isin_sector = {}
+    """
+    Download Upstox instrument master in 500-row batches and store each
+    batch to disk immediately.  If the download fails mid-way, completed
+    batches are preserved and the app still works with partial data.
+    Falls back to BUILTIN_UNIVERSE if the download cannot start at all.
+    """
+    BATCH_DIR.mkdir(exist_ok=True)
+
+    # ── Step 1: Sector maps ──────────────────────────────────────────────
+    isin_sector: dict = {}
     hdrs = {"User-Agent": "Mozilla/5.0 (compatible; Screener/5.0)"}
-    for idx_key, url in NSE_SECTOR_URLS.items():
+    total_sectors = len(NSE_SECTOR_URLS)
+    for i, (idx_key, url) in enumerate(NSE_SECTOR_URLS.items()):
+        if progress_cb:
+            progress_cb(i / (total_sectors * 4),
+                        f"Fetching sector map {i+1}/{total_sectors}: {idx_key.split('|')[1]}…")
         try:
-            r = requests.get(url, headers=hdrs, timeout=10)
+            r = requests.get(url, headers=hdrs, timeout=12)
             if r.status_code == 200:
                 for row in csv.DictReader(io.StringIO(r.text)):
                     isin = (row.get("ISIN Code") or row.get("ISIN") or "").strip()
@@ -355,51 +680,100 @@ def build_universe_sync(progress_cb=None) -> list:
                         isin_sector[isin] = idx_key
         except Exception:
             pass
+        time.sleep(0.3)
 
     if progress_cb:
-        progress_cb(0.15, f"Sector maps: {len(isin_sector)} ISINs → downloading instrument master…")
+        progress_cb(0.25, f"✅ Sector maps: {len(isin_sector):,} ISINs  →  downloading instrument master in batches…")
 
-    # Download instrument master
+    # ── Step 2: Download gzip in chunks ──────────────────────────────────
+    raw_chunks = []
     try:
-        r = requests.get(INSTRUMENT_URL, timeout=60, stream=True)
-        r.raise_for_status()
-        raw = r.content
+        with requests.get(INSTRUMENT_URL, timeout=90, stream=True) as resp:
+            resp.raise_for_status()
+            total_bytes = int(resp.headers.get("Content-Length", 0))
+            downloaded  = 0
+            for chunk in resp.iter_content(chunk_size=65536):   # 64 KB chunks
+                if chunk:
+                    raw_chunks.append(chunk)
+                    downloaded += len(chunk)
+                    if total_bytes > 0 and progress_cb:
+                        pct = 0.25 + (downloaded / total_bytes) * 0.40
+                        progress_cb(pct,
+                            f"Downloading… {downloaded//1024:,} KB / {total_bytes//1024:,} KB")
     except Exception as e:
-        return []
+        if progress_cb:
+            progress_cb(0.25, f"⚠️  Download failed ({e}) — using built-in universe of {len(BUILTIN_UNIVERSE)} stocks")
+        # Return whatever we assembled from previous batches (or built-in)
+        assembled = _assemble_batches()
+        return assembled if assembled else BUILTIN_UNIVERSE
 
     if progress_cb:
-        progress_cb(0.60, "Parsing instrument master…")
+        progress_cb(0.65, "Parsing instrument master and storing batches…")
 
-    with gzip.open(io.BytesIO(raw), "rt", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    # ── Step 3: Parse and store in 500-row batches ───────────────────────
+    raw = b"".join(raw_chunks)
+    try:
+        with gzip.open(io.BytesIO(raw), "rt", encoding="utf-8") as f:
+            all_rows = list(csv.DictReader(f))
+    except Exception as e:
+        if progress_cb:
+            progress_cb(0.65, f"⚠️  Parse error ({e}) — using built-in universe")
+        return BUILTIN_UNIVERSE
 
-    uni, seen = [], set()
-    for row in rows:
+    BATCH_SIZE = 500
+    uni, seen, batch_num = [], set(), 0
+    current_batch: list = []
+
+    for row in all_rows:
         seg  = row.get("segment", "")
         inst = row.get("instrument_type", "")
         ikey = row.get("instrument_key", "")
         isin = row.get("isin", "")
         sym  = row.get("trading_symbol", row.get("tradingsymbol", "")).upper().strip()
         name = row.get("name", sym).strip()
-        if seg not in ("NSE_EQ", "BSE_EQ") or inst != "EQUITY" or not ikey or ikey in seen:
+
+        if seg not in ("NSE_EQ", "BSE_EQ") or inst != "EQUITY":
+            continue
+        if not ikey or ikey in seen:
             continue
         seen.add(ikey)
+
         exch    = "NSE" if seg == "NSE_EQ" else "BSE"
         nse_sec = isin_sector.get(isin, "NSE_INDEX|Nifty 500")
         bse_sec = nse_sec.replace("NSE_INDEX|Nifty", "BSE_INDEX|S&P BSE")
-        uni.append({"name": name[:32], "sym": sym, "ikey": ikey,
-                    "sector": nse_sec if exch == "NSE" else bse_sec,
-                    "exch": exch, "isin": isin})
+        stock   = {"name": name[:32], "sym": sym, "ikey": ikey,
+                   "sector": nse_sec if exch == "NSE" else bse_sec,
+                   "exch": exch, "isin": isin}
+
+        current_batch.append(stock)
+        uni.append(stock)
+
+        if len(current_batch) >= BATCH_SIZE:
+            batch_path = BATCH_DIR / f"batch_{batch_num:04d}.json"
+            batch_path.write_text(json.dumps(current_batch, separators=(",", ":")))
+            batch_num    += 1
+            current_batch = []
+
+            if progress_cb:
+                pct = 0.65 + min(batch_num / 12, 1.0) * 0.30
+                progress_cb(pct, f"Stored batch {batch_num} — {len(uni):,} stocks so far…")
+
+    # Save final partial batch
+    if current_batch:
+        batch_path = BATCH_DIR / f"batch_{batch_num:04d}.json"
+        batch_path.write_text(json.dumps(current_batch, separators=(",", ":")))
+
+    # ── Step 4: Merge + save combined cache ──────────────────────────────
+    _save_merged_cache(uni)
 
     nse_c = sum(1 for u in uni if u["exch"] == "NSE")
     bse_c = len(uni) - nse_c
-    cache = {"generated": datetime.datetime.now().isoformat(),
-             "total": len(uni), "nse": nse_c, "bse": bse_c, "universe": uni}
-    UNIVERSE_CACHE.write_text(json.dumps(cache, separators=(",", ":")))
-
     if progress_cb:
-        progress_cb(1.0, f"✅ Done: {len(uni):,} stocks  ({nse_c:,} NSE + {bse_c:,} BSE)")
+        progress_cb(1.0,
+            f"✅ Complete: {len(uni):,} stocks ({nse_c:,} NSE + {bse_c:,} BSE) "
+            f"in {batch_num+1} batches stored to disk")
     return uni
+
 
 def get_fundamentals() -> dict:
     return json.loads(FUND_DATA_PATH.read_text()) if FUND_DATA_PATH.exists() else {}
@@ -922,24 +1296,30 @@ with st.sidebar:
     nse_c = sum(1 for u in uni if u.get("exch") == "NSE")
     bse_c = uni_size - nse_c
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     col1.metric("NSE", f"{nse_c:,}")
     col2.metric("BSE", f"{bse_c:,}")
+    batch_count = len(list(BATCH_DIR.glob("batch_*.json"))) if BATCH_DIR.exists() else 0
+    col3.metric("Batches", f"{batch_count}")
 
-    if st.button("🔄 Refresh Universe (~5000 stocks)", use_container_width=True):
-        with st.spinner("Downloading Upstox instrument master…"):
-            prog_ph = st.empty()
-            bar_ph  = st.progress(0.0)
-            def _prog(pct, msg):
-                bar_ph.progress(min(pct, 1.0))
-                prog_ph.caption(msg)
-            new_uni = build_universe_sync(_prog)
-        if new_uni:
-            load_universe_cache.clear()
-            st.success(f"✅ {len(new_uni):,} stocks loaded")
-            st.rerun()
-        else:
-            st.error("Download failed. Check network connection.")
+    if st.button("🔄 Download Universe (~5000 stocks)", use_container_width=True):
+        bar_ph  = st.progress(0.0)
+        prog_ph = st.empty()
+        def _prog(pct, msg):
+            bar_ph.progress(min(float(pct), 1.0))
+            prog_ph.caption(msg)
+        # Download runs synchronously with live progress
+        new_uni = build_universe_sync(_prog)
+        load_universe_cache.clear()
+        if new_uni and new_uni is not BUILTIN_UNIVERSE:
+            st.success(f"✅ {len(new_uni):,} stocks downloaded & stored in batches")
+        elif new_uni:
+            st.warning(
+                f"⚠️ Download failed — using built-in universe of "
+                f"{len(new_uni):,} stocks. "
+                f"Check your internet connection and try again."
+            )
+        st.rerun()
 
     if UNIVERSE_CACHE.exists():
         info = json.loads(UNIVERSE_CACHE.read_text())
@@ -1035,10 +1415,9 @@ if run_btn:
     if not token:
         st.error("⚠️ Please enter your Upstox Access Token in the sidebar.")
         st.stop()
-    uni_now = load_universe_cache()
+    uni_now = load_universe_cache()  # always returns at least BUILTIN_UNIVERSE
     if not uni_now:
-        st.error("⚠️ Universe is empty. Click **🔄 Refresh Universe** first.")
-        st.stop()
+        uni_now = BUILTIN_UNIVERSE
     st.session_state.results       = []
     st.session_state.scan_running  = True
     st.session_state.scan_done     = False
@@ -1118,9 +1497,14 @@ if not results and not st.session_state.scan_running:
       </div>
     </div>""", unsafe_allow_html=True)
 
-    st.info("**Step 1:** Click **🔄 Refresh Universe** in the sidebar (once)  \n"
-            "**Step 2:** Paste your Upstox token  \n"
-            "**Step 3:** Click **🔍 RUN FULL SCAN**")
+    st.info(
+        "**Ready to scan right away!** A built-in universe of "
+        f"**{len(BUILTIN_UNIVERSE):,} NSE+BSE stocks** is pre-loaded.\n\n"
+        "**Step 1:** Paste your Upstox token in the sidebar  \n"
+        "**Step 2:** Click **🔍 RUN FULL SCAN**  \n\n"
+        "👉 Optionally click **🔄 Download Universe** to expand to ~5,000 stocks "
+        "(stored in 500-stock batches so partial downloads still work)."
+    )
     st.stop()
 
 # ── Exchange filter ───────────────────────────────────────────────────────────
