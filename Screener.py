@@ -22,8 +22,11 @@ from plotly.subplots import make_subplots
 #  CONFIG
 # ===========================================================================
 UPSTOX_BASE  = "https://api.upstox.com/v2"
-DB_PATH      = Path("universe.db")
-FUND_PATH    = Path("fundamentals.json")
+DB_PATH          = Path("universe.db")
+FUND_PATH        = Path("fundamentals.json")
+INST_CSV_PATH    = Path("instruments.csv")         # decoded flat CSV saved after download
+INST_GZ_PATH     = Path("instruments_raw.csv.gz")  # raw gzip from Upstox CDN
+INST_META_PATH   = Path("instruments_meta.json")   # download metadata
 
 # Upstox CDN instrument master URLs (tries each in order)
 INST_URLS = [
@@ -167,7 +170,7 @@ def _init():
         "results":[],"scan_running":False,"scan_done":False,"scan_error":"",
         "last_scan_time":None,"exch_filter":"All",
         "token_status":"unknown","token_user":"",
-        "dl_running":False,"dl_msg":"","dl_error":"",
+        "dl_running":False,"dl_msg":"","dl_error":"","gh_token":"","gh_repo":"","gh_branch":"main",
         "live_prices":{},"live_updated":None,
     }.items():
         if k not in st.session_state: st.session_state[k]=v
@@ -252,6 +255,110 @@ def db_get_keys():
         c=_db(); k={r[0] for r in c.execute("SELECT ikey FROM instruments").fetchall()}
         c.close(); return k
     except: return set()
+
+
+# ===========================================================================
+#  GITHUB FILE STORAGE
+#  Persists instruments.csv and universe.db snapshots to a GitHub repo.
+#  Set GITHUB_TOKEN + GITHUB_REPO in Streamlit secrets or sidebar.
+#  Format: GITHUB_REPO = "username/repo-name"  branch = "main"
+# ===========================================================================
+import base64
+
+def _gh_headers(token: str) -> dict:
+    return {"Authorization": f"token {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"}
+
+def github_upload_file(gh_token: str, repo: str, file_path: Path,
+                       remote_path: str, message: str = None,
+                       branch: str = "main") -> dict:
+    """
+    Upload/update a file in a GitHub repo via the Contents API.
+    Returns {ok, url, sha, error}.
+    """
+    if not file_path.exists():
+        return {"ok": False, "error": f"{file_path} does not exist"}
+    if not gh_token or not repo:
+        return {"ok": False, "error": "GitHub token and repo required"}
+
+    content_b64 = base64.b64encode(file_path.read_bytes()).decode()
+    api_url = f"https://api.github.com/repos/{repo}/contents/{remote_path}"
+    msg = message or f"Update {remote_path} — {datetime.datetime.now().strftime('%Y-%m-%d %H:%M IST')}"
+
+    # Check if file already exists (need sha for update)
+    existing_sha = None
+    try:
+        r = requests.get(api_url, headers=_gh_headers(gh_token),
+                         params={"ref": branch}, timeout=10)
+        if r.status_code == 200:
+            existing_sha = r.json().get("sha")
+    except Exception:
+        pass
+
+    payload = {"message": msg, "content": content_b64, "branch": branch}
+    if existing_sha:
+        payload["sha"] = existing_sha
+
+    try:
+        r = requests.put(api_url, headers=_gh_headers(gh_token),
+                         json=payload, timeout=30)
+        if r.status_code in (200, 201):
+            info = r.json()
+            return {"ok": True,
+                    "url": info.get("content", {}).get("html_url", ""),
+                    "sha": info.get("content", {}).get("sha", ""),
+                    "error": ""}
+        return {"ok": False, "error": f"HTTP {r.status_code}: {r.json().get('message','')}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+def github_download_file(gh_token: str, repo: str, remote_path: str,
+                          save_to: Path, branch: str = "main") -> dict:
+    """
+    Download a file from GitHub and save it locally.
+    Returns {ok, size_kb, error}.
+    """
+    if not gh_token or not repo:
+        return {"ok": False, "error": "GitHub token and repo required"}
+    api_url = f"https://api.github.com/repos/{repo}/contents/{remote_path}"
+    try:
+        r = requests.get(api_url, headers=_gh_headers(gh_token),
+                         params={"ref": branch}, timeout=15)
+        if r.status_code == 404:
+            return {"ok": False, "error": f"{remote_path} not found in repo"}
+        r.raise_for_status()
+        data = r.json()
+        # For small files GitHub returns base64 content directly
+        if data.get("encoding") == "base64":
+            raw = base64.b64decode(data["content"])
+        else:
+            # Large files — use download_url
+            dl = requests.get(data["download_url"], timeout=30)
+            dl.raise_for_status()
+            raw = dl.content
+        save_to.write_bytes(raw)
+        return {"ok": True, "size_kb": len(raw) // 1024, "error": ""}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+def github_list_files(gh_token: str, repo: str,
+                       folder: str = "", branch: str = "main") -> list:
+    """Return list of files in a repo folder."""
+    if not gh_token or not repo:
+        return []
+    api_url = f"https://api.github.com/repos/{repo}/contents/{folder}"
+    try:
+        r = requests.get(api_url, headers=_gh_headers(gh_token),
+                         params={"ref": branch}, timeout=10)
+        if r.status_code == 200:
+            return [{"name": f["name"], "path": f["path"],
+                     "size_kb": f.get("size", 0) // 1024,
+                     "url": f.get("html_url", "")}
+                    for f in r.json() if f.get("type") == "file"]
+    except Exception:
+        pass
+    return []
 
 # ===========================================================================
 #  INSTRUMENT DOWNLOAD — full CSV from Upstox developer portal
@@ -405,17 +512,50 @@ def download_instruments_full(token, progress_cb=None):
         return {"ok":False,"error":"All download methods failed. Check token and network.",
                 "total":db_total_count(),"new":0}
 
-    # Step 4: Save to DB in batches of 500
+    # Step 4: Save raw gzip to disk
+    if raw_bytes:
+        try:
+            INST_GZ_PATH.write_bytes(raw_bytes)
+            _sl(f"Gzip saved: {INST_GZ_PATH} ({len(raw_bytes)//1024:,} KB)")
+        except Exception as e:
+            _sl(f"Could not save gzip: {e}")
+
+    # Step 5: Save decoded CSV (all columns, human-readable)
+    try:
+        if progress_cb: progress_cb(0.68, f"Writing {len(instruments):,} rows to {INST_CSV_PATH}...")
+        with open(INST_CSV_PATH, "w", newline="", encoding="utf-8") as cf:
+            fieldnames = ["ikey","sym","name","exch","segment","inst_type",
+                          "lot_size","tick_size","isin","sector","expiry"]
+            w = csv.DictWriter(cf, fieldnames=fieldnames, extrasaction="ignore")
+            w.writeheader(); w.writerows(instruments)
+        _sl(f"CSV saved: {INST_CSV_PATH} ({INST_CSV_PATH.stat().st_size//1024:,} KB)")
+    except Exception as e:
+        _sl(f"Could not save CSV: {e}")
+
+    # Step 6: Save metadata
+    try:
+        INST_META_PATH.write_text(json.dumps({
+            "downloaded": datetime.datetime.now().isoformat(),
+            "total": len(instruments),
+            "source": "CDN" if raw_bytes else "API",
+            "gz_path": str(INST_GZ_PATH.resolve()) if INST_GZ_PATH.exists() else "",
+            "csv_path": str(INST_CSV_PATH.resolve()) if INST_CSV_PATH.exists() else "",
+            "csv_size_kb": INST_CSV_PATH.stat().st_size // 1024 if INST_CSV_PATH.exists() else 0,
+            "db_path": str(DB_PATH.resolve()),
+        }, indent=2))
+    except Exception as e:
+        _sl(f"Meta save error: {e}")
+
+    # Step 7: Save to DB in batches of 500
     existing_keys=db_get_keys()
     new_rows=[r for r in instruments if r["ikey"] not in existing_keys]
-    if progress_cb: progress_cb(0.70,f"Saving {len(new_rows):,} new instruments to DB...")
-
+    if progress_cb: progress_cb(0.72, f"Saving {len(new_rows):,} new rows to DB...")
     BATCH=500
     for i in range(0,len(new_rows),BATCH):
         db_save_many(new_rows[i:i+BATCH])
         if progress_cb:
-            pct=0.70+(i/max(len(new_rows),1))*0.28
-            progress_cb(pct,f"Saved {min(i+BATCH,len(new_rows)):,} / {len(new_rows):,}...")
+            pct=0.72+(i/max(len(new_rows),1))*0.26
+            progress_cb(pct,f"DB: {min(i+BATCH,len(new_rows)):,} / {len(new_rows):,}...")
 
     c=db_count()
     if progress_cb:
@@ -423,7 +563,9 @@ def download_instruments_full(token, progress_cb=None):
             f"Done! {c['total']:,} total ({c['nse']:,} NSE + {c['bse']:,} BSE) | "
             f"{len(new_rows):,} new this run")
     return {"ok":True,"total":c["total"],"nse":c["nse"],"bse":c["bse"],
-            "new":len(new_rows),"error":""}
+            "new":len(new_rows),"error":"",
+            "csv_path": str(INST_CSV_PATH.resolve()) if INST_CSV_PATH.exists() else "",
+            "gz_path":  str(INST_GZ_PATH.resolve())  if INST_GZ_PATH.exists()  else ""}
 
 # ===========================================================================
 #  UPSTOX LIVE DATA
@@ -1060,7 +1202,27 @@ if st.session_state.get("dl_running"):
         st.session_state.dl_running=False
         if res["ok"]:
             st.session_state.dl_error=""
-            st.success(f"{res['total']:,} instruments downloaded  ({res['nse']:,} NSE + {res['bse']:,} BSE)  |  {res.get('new',0):,} new")
+            csv_loc = res.get("csv_path","")
+            gz_loc  = res.get("gz_path","")
+            st.success(
+                f"{res['total']:,} instruments downloaded  "
+                f"({res['nse']:,} NSE + {res['bse']:,} BSE)  |  "
+                f"{res.get('new',0):,} new\n\n"
+                f"**CSV saved:** `{csv_loc}`  \n"
+                f"**DB saved:**  `{Path('universe.db').resolve()}`"
+            )
+            # Auto-upload to GitHub if configured
+            _ght2 = st.session_state.get("gh_token","")
+            _ghr2 = st.session_state.get("gh_repo","")
+            if _ght2 and _ghr2 and INST_CSV_PATH.exists():
+                with st.spinner("Auto-uploading instruments.csv to GitHub..."):
+                    gu = github_upload_file(_ght2, _ghr2, INST_CSV_PATH,
+                                            "data/instruments.csv",
+                                            branch=st.session_state.get("gh_branch","main"))
+                if gu["ok"]:
+                    st.info(f"GitHub: instruments.csv saved to {_ghr2}/data/  {gu.get('url','')}")
+                else:
+                    st.warning(f"GitHub upload failed: {gu['error']}")
         else:
             st.session_state.dl_error=res["error"]
             st.error(f"Download failed: {res['error'][:300]}")
@@ -1272,13 +1434,137 @@ with tab_inst:
         st.progress(min(_dc2["total"]/8000,1.0))
         st.caption(f"{_dc2['total']:,} instruments stored  |  {_dc2['total']/80:.1f}% of ~8K target")
 
+    # ---- File locations ----
+    _cwd = Path(".").resolve()
+    with st.expander("File Locations", expanded=True):
+        _meta = {}
+        if INST_META_PATH.exists():
+            try: _meta = json.loads(INST_META_PATH.read_text())
+            except: pass
+        rows_loc = [
+            ("SQLite DB",       DB_PATH,       "All instruments + indices"),
+            ("Instruments CSV", INST_CSV_PATH, "Full flat CSV — open in Excel"),
+            ("Raw Gzip",        INST_GZ_PATH,  "Original .csv.gz from Upstox CDN"),
+            ("Fundamentals",    FUND_PATH,     "EPS/Revenue data for screener"),
+        ]
+        for label, fpath, note in rows_loc:
+            exists = fpath.exists()
+            size   = f"{fpath.stat().st_size//1024:,} KB" if exists else "not yet created"
+            icon   = "✅" if exists else "⬜"
+            st.markdown(
+                f"{icon} **{label}** — `{_cwd / fpath}` — *{size}* — {note}",
+                unsafe_allow_html=False)
+        if _meta.get("downloaded"):
+            st.caption(f"Last download: {_meta['downloaded'][:16]}  |  Source: {_meta.get('source','?')}  |  {_meta.get('total',0):,} instruments")
+
+    # ---- GitHub Storage ----
+    st.markdown('<div class="sec-lbl">GitHub Storage</div>', unsafe_allow_html=True)
+    st.caption("Save instruments.csv and DB snapshots to your GitHub repo so they persist across restarts.")
+
+    gh_c1, gh_c2 = st.columns(2)
+    with gh_c1:
+        gh_token = st.text_input("GitHub Token (PAT)",
+            type="password", placeholder="ghp_xxxxxxxxxxxx",
+            value=st.session_state.get("gh_token",""), key="gh_token_input",
+            help="Settings → Developer settings → Personal access tokens → Fine-grained → repo:write")
+        if gh_token != st.session_state.get("gh_token",""):
+            st.session_state.gh_token = gh_token
+    with gh_c2:
+        gh_repo = st.text_input("GitHub Repo",
+            placeholder="username/repo-name",
+            value=st.session_state.get("gh_repo",""), key="gh_repo_input",
+            help="e.g. donald/nse-screener-data")
+        if gh_repo != st.session_state.get("gh_repo",""):
+            st.session_state.gh_repo = gh_repo
+
+    gh_branch = st.text_input("Branch", value=st.session_state.get("gh_branch","main"),
+                               key="gh_branch_input")
+    if gh_branch != st.session_state.get("gh_branch","main"):
+        st.session_state.gh_branch = gh_branch
+
+    # Upload buttons
+    gbu1, gbu2, gbu3, gbu4 = st.columns(4)
+    _ght = st.session_state.get("gh_token","")
+    _ghr = st.session_state.get("gh_repo","")
+    _ghb = st.session_state.get("gh_branch","main")
+
+    with gbu1:
+        if st.button("Upload instruments.csv", use_container_width=True, key="gh_up_csv",
+                     disabled=not (INST_CSV_PATH.exists() and _ght and _ghr)):
+            with st.spinner("Uploading instruments.csv to GitHub..."):
+                res = github_upload_file(_ght, _ghr, INST_CSV_PATH,
+                                         "data/instruments.csv", branch=_ghb)
+            if res["ok"]:
+                st.success(f"Uploaded! {res.get('url','')}")
+            else:
+                st.error(res["error"])
+
+    with gbu2:
+        if st.button("Upload universe.db", use_container_width=True, key="gh_up_db",
+                     disabled=not (DB_PATH.exists() and _ght and _ghr)):
+            with st.spinner("Uploading universe.db to GitHub..."):
+                res = github_upload_file(_ght, _ghr, DB_PATH,
+                                         "data/universe.db", branch=_ghb)
+            if res["ok"]:
+                st.success(f"Uploaded! {res.get('url','')}")
+            else:
+                st.error(res["error"])
+
+    with gbu3:
+        if st.button("Download instruments.csv", use_container_width=True, key="gh_dl_csv",
+                     disabled=not (_ght and _ghr)):
+            with st.spinner("Downloading instruments.csv from GitHub..."):
+                res = github_download_file(_ght, _ghr, "data/instruments.csv",
+                                            INST_CSV_PATH, branch=_ghb)
+            if res["ok"]:
+                st.success(f"Downloaded {res['size_kb']:,} KB → {INST_CSV_PATH}")
+                # Auto-import CSV into DB
+                try:
+                    with open(INST_CSV_PATH, newline="", encoding="utf-8") as cf:
+                        rows_in = list(csv.DictReader(cf))
+                    if rows_in:
+                        db_save_many(rows_in)
+                        load_universe.clear()
+                        st.success(f"Imported {len(rows_in):,} instruments into DB")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"CSV import error: {e}")
+            else:
+                st.error(res["error"])
+
+    with gbu4:
+        if st.button("Download universe.db", use_container_width=True, key="gh_dl_db",
+                     disabled=not (_ght and _ghr)):
+            with st.spinner("Downloading universe.db from GitHub..."):
+                res = github_download_file(_ght, _ghr, "data/universe.db",
+                                            DB_PATH, branch=_ghb)
+            if res["ok"]:
+                load_universe.clear()
+                st.success(f"Downloaded {res['size_kb']:,} KB → {DB_PATH}")
+                st.rerun()
+            else:
+                st.error(res["error"])
+
+    # List files in GitHub repo data folder
+    if _ght and _ghr:
+        if st.button("List files in GitHub repo/data", key="gh_list"):
+            files = github_list_files(_ght, _ghr, "data", _ghb)
+            if files:
+                st.table(pd.DataFrame(files))
+            else:
+                st.info("No files found in data/ folder (may not exist yet — upload something first)")
+
+    if st.session_state.get("dl_error"):
+        with st.expander("Download Errors",expanded=True):
+            st.code(st.session_state.dl_error)
+
     st.divider()
     idc1,idc2,idc3=st.columns([2,2,1])
     with idc1:
-        if st.button("Download Full List",use_container_width=True,key="inst_dl",
+        if st.button("Download Full List from Upstox",use_container_width=True,key="inst_dl",
                      disabled=st.session_state.get("dl_running",False)):
             if not st.session_state.get("token_input",""):
-                st.error("Verify token first")
+                st.error("Verify Upstox token first")
             else:
                 st.session_state.dl_running=True; st.session_state.dl_msg="Starting..."
                 st.session_state.dl_error=""; st.rerun()
@@ -1291,10 +1577,6 @@ with tab_inst:
         if st.button("Clear DB",use_container_width=True,key="inst_clr"):
             if DB_PATH.exists(): DB_PATH.unlink()
             load_universe.clear(); st.rerun()
-
-    if st.session_state.get("dl_error"):
-        with st.expander("Download Errors",expanded=True):
-            st.code(st.session_state.dl_error)
 
     st.divider()
 
