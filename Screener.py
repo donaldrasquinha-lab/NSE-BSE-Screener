@@ -1,262 +1,35 @@
 # -*- coding: utf-8 -*-
 """
-NSE + BSE Multibagger Screener -- Streamlit Edition
-~5000 Stocks | EPS Acceleration | RS Resilience | 21MA Buy Zone
+NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
+Downloads full Upstox instrument CSV | Live scan after filter | Database tab
 
 INSTALL:  pip install streamlit plotly requests numpy pandas
 RUN:      streamlit run screener_st.py
 """
 
-# -- stdlib ------------------------------------------------------------------
-import gzip, io, csv, json, math, time, datetime, logging, sqlite3, threading
-from typing import Optional
+import io, csv, gzip, json, math, time, datetime, sqlite3, threading, traceback
 from pathlib import Path
+from typing   import Optional
 
-# -- third-party --------------------------------------------------------------
 import requests
-import numpy as np
+import numpy  as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-import plotly.express as px
 from plotly.subplots import make_subplots
 
 # ===========================================================================
-#  PAGE CONFIG
+#  CONFIG
 # ===========================================================================
-st.set_page_config(
-    page_title="NSE+BSE Multibagger Screener",
-    page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+UPSTOX_BASE  = "https://api.upstox.com/v2"
+DB_PATH      = Path("universe.db")
+FUND_PATH    = Path("fundamentals.json")
 
-# ===========================================================================
-#  GLOBAL CSS  — warm deep-navy, eye-comfort palette
-# ===========================================================================
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-:root {
-  --bg:     #0f1117; --surf:   #13161f; --card:  #181c28;
-  --card2:  #1c2030; --border: #252a3a; --border2:#2e364d;
-  --sky:    #5bc4f5; --sage:   #4ecf8f; --amber: #f0b429;
-  --coral:  #f07070; --lav:    #a78bfa; --tang:  #f0834a;
-  --t1: #e8ecf4; --t2: #b4bdce; --t3: #737e96; --t4: #454d63;
-}
-
-html, body, [data-testid="stAppViewContainer"],
-[data-testid="stMain"], .main {
-  background: var(--bg) !important; color: var(--t2) !important;
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
-}
-
-/* Header */
-.screener-header {
-  background: linear-gradient(135deg, #0d1624 0%, #131e30 60%, #0a1118 100%);
-  border: 1px solid var(--border2); border-radius: 12px;
-  padding: 22px 28px 18px; margin-bottom: 20px; position: relative; overflow: hidden;
-}
-.screener-header::after {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--sky) 25%, var(--sage) 65%, var(--amber) 88%, transparent);
-}
-.screener-header h1 {
-  font-weight: 800; font-size: 1.6rem; color: var(--t1);
-  letter-spacing: -.5px; margin: 0; line-height: 1.1;
-}
-.screener-header .sub {
-  font-family: 'JetBrains Mono', monospace; font-size: .62rem;
-  color: var(--t3); margin-top: 6px; letter-spacing: .8px;
-}
-
-/* Section labels */
-.sec-lbl {
-  font-family: 'JetBrains Mono', monospace; font-size: .6rem;
-  letter-spacing: 2px; text-transform: uppercase; color: var(--sky);
-  border-left: 2px solid var(--sky); padding-left: 9px; margin: 16px 0 10px;
-}
-
-/* KPI cards */
-.kpi-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
-.kpi {
-  flex: 1; min-width: 100px; background: var(--card);
-  border: 1px solid var(--border); border-radius: 10px;
-  padding: 14px 16px; text-align: center;
-}
-.kpi .v { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1.85rem; line-height: 1; }
-.kpi .l { font-size: .58rem; color: var(--t3); text-transform: uppercase; letter-spacing: 1px; margin-top: 5px; }
-.c-sky   { color: var(--sky); }   .c-sage  { color: var(--sage); }
-.c-amber { color: var(--amber); } .c-lav   { color: var(--lav); }
-.c-tang  { color: var(--tang); }  .c-coral { color: var(--coral); }
-
-/* Badges */
-.badge {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 2px 8px; border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace; font-size: .58rem; letter-spacing: .3px;
-}
-.b-rs   { background:rgba(91,196,245,.1);  color:var(--sky);   border:1px solid rgba(91,196,245,.25); }
-.b-bz   { background:rgba(240,131,74,.1);  color:var(--tang);  border:1px solid rgba(240,131,74,.25); }
-.b-acc  { background:rgba(240,180,41,.1);  color:var(--amber); border:1px solid rgba(240,180,41,.25); }
-.b-srp  { background:rgba(167,139,250,.1); color:var(--lav);   border:1px solid rgba(167,139,250,.25); }
-.b-sal  { background:rgba(78,207,143,.1);  color:var(--sage);  border:1px solid rgba(78,207,143,.25); }
-.b-star { background:rgba(240,180,41,.15); color:#f5c842;       border:1px solid rgba(245,200,66,.35); font-weight:700; }
-.b-nse  { background:rgba(91,196,245,.08); color:var(--sky);   border:1px solid rgba(91,196,245,.2); font-size:.52rem; }
-.b-bse  { background:rgba(240,180,41,.08); color:var(--amber); border:1px solid rgba(240,180,41,.2); font-size:.52rem; }
-
-/* Stock cards */
-.scard {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 10px; padding: 16px; margin-bottom: 10px;
-}
-.scard.perfect {
-  background: linear-gradient(160deg, #141c18, var(--card));
-  border-color: rgba(78,207,143,.28);
-}
-.star-tag {
-  font-family: 'JetBrains Mono', monospace; font-size: .55rem;
-  letter-spacing: 2px; color: var(--sage); margin-bottom: 10px;
-  text-transform: uppercase;
-}
-.card-header {
-  display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
-}
-.sym { font-weight: 800; font-size: 1.1rem; color: var(--t1); }
-.nm  { font-size: .72rem; color: var(--t3); }
-.sect {
-  font-family: 'JetBrains Mono', monospace; font-size: .58rem;
-  color: var(--t4); background: var(--card2); padding: 2px 7px; border-radius: 3px;
-}
-.px-val {
-  margin-left: auto; font-family: 'JetBrains Mono', monospace;
-  font-weight: 600; font-size: 1rem; color: var(--t1);
-}
-
-/* Metric grid inside cards */
-.mgrid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 6px; margin: 12px 0;
-}
-.met {
-  background: var(--card2); border: 1px solid var(--border);
-  border-radius: 6px; padding: 9px 11px;
-}
-.met .ml { font-size: .57rem; color: var(--t4); text-transform: uppercase; letter-spacing: .8px; }
-.met .mv { font-size: .86rem; font-weight: 600; color: var(--t1); margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
-
-/* Intel panels */
-.igrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-.ip {
-  background: #111520; border: 1px solid var(--border);
-  border-radius: 7px; padding: 12px 13px;
-}
-.ip .il { font-family: 'JetBrains Mono', monospace; font-size: .57rem; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 5px; }
-.ip .iv { font-size: .82rem; font-weight: 600; color: var(--t1); line-height: 1.3; }
-.ip .is { font-family: 'JetBrains Mono', monospace; font-size: .61rem; color: var(--t4); margin-top: 4px; }
-
-/* Staircase */
-.stair {
-  display: flex; align-items: flex-end; gap: 5px; height: 82px;
-  padding: 6px 8px 0; background: #111520; border: 1px solid var(--border);
-  border-radius: 7px; margin: 12px 0;
-}
-.scol { display:flex; flex-direction:column; align-items:center; flex:1; height:100%; justify-content:flex-end; }
-.sarr { font-size:.58rem; margin-bottom:2px; line-height:1; font-family:'JetBrains Mono',monospace; }
-.sbar {
-  width:100%; border-radius:3px 3px 0 0; min-height:8px;
-  display:flex; align-items:center; justify-content:center;
-  font-size:.57rem; font-weight:600; color:rgba(0,0,0,.85);
-}
-.slb { font-family:'JetBrains Mono',monospace; font-size:.53rem; color:var(--t4); margin-top:3px; white-space:nowrap; }
-
-/* Progress */
-.prog-box {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
-}
-.prog-box .plbl { font-size: .72rem; font-weight: 600; color: var(--sky); margin-bottom: 8px; }
-.prog-box .pmsg { font-family: 'JetBrains Mono', monospace; font-size: .62rem; color: var(--t4); margin-top: 6px; }
-
-/* Rules */
-.rule-card {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 10px; padding: 16px; height: 100%;
-}
-.rule-num { font-family: 'JetBrains Mono', monospace; font-size: .57rem; letter-spacing: 2px; margin-bottom: 7px; text-transform: uppercase; }
-.rule-card h4 { font-size: .9rem; font-weight: 700; color: var(--t1); margin-bottom: 7px; }
-.rule-card p  { font-size: .73rem; color: var(--t2); line-height: 1.65; }
-.rule-ex { margin-top: 9px; padding: 7px 10px; background: rgba(0,0,0,.25); border-radius: 5px; font-family: 'JetBrains Mono', monospace; font-size: .63rem; }
-
-/* Perfect setup box */
-.setup-box {
-  position: relative; background: linear-gradient(135deg, #131c15, var(--card));
-  border: 1px solid rgba(78,207,143,.22); border-radius: 10px;
-  padding: 18px 20px; margin: 12px 0;
-}
-.setup-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.si { background: rgba(0,0,0,.25); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; flex: 1; min-width: 140px; }
-.si .sil { font-family: 'JetBrains Mono', monospace; font-size: .56rem; color: var(--t4); text-transform: uppercase; letter-spacing: .8px; }
-.si .siv { font-size: .78rem; font-weight: 600; color: var(--t1); margin-top: 3px; }
-
-/* Table */
-.tbl-wrap { overflow-x: auto; }
-
-/* Streamlit overrides */
-[data-testid="stSidebar"] { background: #13161f !important; border-right: 1px solid #252a3a !important; }
-[data-testid="stSidebar"] * { color: var(--t2) !important; }
-.stButton > button {
-  background: linear-gradient(135deg, #1a4a8a, #0d3066) !important;
-  color: var(--sky) !important; border: 1px solid rgba(91,196,245,.3) !important;
-  border-radius: 8px !important; font-weight: 700 !important;
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
-  transition: all .2s !important;
-}
-.stButton > button:hover {
-  background: linear-gradient(135deg, #1e5599, #1040a0) !important;
-  box-shadow: 0 4px 20px rgba(91,196,245,.18) !important;
-  transform: translateY(-1px) !important;
-}
-.stTextInput > div > div > input,
-.stNumberInput > div > div > input {
-  background: #181c28 !important; border: 1px solid #2e364d !important;
-  color: #e8ecf4 !important; border-radius: 7px !important;
-  font-family: 'JetBrains Mono', monospace !important;
-}
-.stSelectbox > div > div { background: #181c28 !important; border-color: #2e364d !important; }
-.stSlider > div { color: var(--t2) !important; }
-div[data-baseweb="slider"] > div { background: #2e364d !important; }
-div[data-baseweb="slider"] > div > div { background: var(--sky) !important; }
-.stTabs [role="tablist"] { background: #181c28; border: 1px solid #252a3a; border-radius: 10px; padding: 3px; }
-.stTabs [role="tab"]          { color: var(--t3) !important; border-radius: 7px !important; font-family: 'Plus Jakarta Sans', sans-serif !important; font-weight: 600 !important; }
-.stTabs [aria-selected="true"] { background: #1f2438 !important; color: var(--sky) !important; }
-.stDataFrame { border-radius: 10px !important; overflow: hidden; }
-div[data-testid="stInfo"]    { background: rgba(91,196,245,.07) !important; border: 1px solid rgba(91,196,245,.2) !important; }
-div[data-testid="stSuccess"] { background: rgba(78,207,143,.07) !important; border: 1px solid rgba(78,207,143,.2) !important; }
-div[data-testid="stWarning"] { background: rgba(240,180,41,.07) !important; border: 1px solid rgba(240,180,41,.2) !important; }
-div[data-testid="stError"]   { background: rgba(240,112,112,.07) !important; border: 1px solid rgba(240,112,112,.2) !important; }
-.stProgress > div > div { background: linear-gradient(90deg, var(--sky), var(--sage)) !important; }
-#MainMenu, footer, header { visibility: hidden !important; }
-</style>
-""", unsafe_allow_html=True)
-
-# ===========================================================================
-#  CONFIGURATION
-# ===========================================================================
-UPSTOX_BASE    = "https://api.upstox.com/v2"
-# Upstox instrument master — multiple sources tried in order
-INSTRUMENT_URLS = [
-    # Source 1: Upstox CDN (requires Accept header, may need auth)
+# Upstox CDN instrument master URLs (tries each in order)
+INST_URLS = [
     "https://assets.upstox.com/market-assets/instruments/exchange/complete.csv.gz",
-    # Source 2: Upstox alternate CDN path
-    "https://assets.upstox.com/market-assets/instruments/v2/exchange/complete.json.gz",
+    "https://assets.upstox.com/market-assets/instruments/v2/NSE.csv.gz",
 ]
-INSTRUMENT_URL = INSTRUMENT_URLS[0]   # kept for backward compat
-UNIVERSE_CACHE = Path("universe_cache.json")
-FUND_DATA_PATH = Path("fundamentals.json")
-QUOTE_BATCH    = 200
-QL             = ["Q1", "Q2", "Q3", "Q4 Latest"]
 
 NSE_SECTOR_URLS = {
     "NSE_INDEX|Nifty IT":     "https://www.nse-india.com/content/indices/ind_niftyit.csv",
@@ -271,1977 +44,1326 @@ NSE_SECTOR_URLS = {
         "https://www.nse-india.com/content/indices/ind_niftyfinservice.csv",
 }
 
+st.set_page_config(page_title="NSE+BSE Screener",page_icon="🚀",layout="wide",
+                   initial_sidebar_state="expanded")
+
 # ===========================================================================
-#  SESSION STATE INITIALISATION
+#  CSS
 # ===========================================================================
-# -- Thread-safe scan state ----------------------------------------------
-# Background thread writes to _SCAN (a plain dict — safe to share).
-# Main thread reads _SCAN and copies finished results to session_state.
-import threading as _threading
-_SCAN: dict = {
-    "running":   False,
-    "progress":  0.0,
-    "msg":       "",
-    "stats":     {"total": 0, "processed": 0, "passed": 0, "perfect": 0},
-    "results":   [],
-    "done":      False,
-    "error":     "",
-    "log":       [],          # full error/warning log visible in UI
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0a0d14;--surf:#0f1320;--card:#131928;--card2:#181f2e;
+  --border:#1e2740;--border2:#253050;
+  --sky:#38bdf8;--sage:#34d399;--amber:#fbbf24;--coral:#f87171;
+  --lav:#a78bfa;--tang:#fb923c;
+  --t1:#f0f4ff;--t2:#a8b4cc;--t3:#5c6a88;--t4:#2e3a52;
+  --sans:'DM Sans',system-ui,sans-serif;
+  --mono:'JetBrains Mono',monospace;
 }
-_SCAN_LOCK = _threading.Lock()
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
+  background:var(--bg)!important;color:var(--t2)!important;font-family:var(--sans)!important;}
+[data-testid="stSidebar"]{background:#0c1018!important;border-right:1px solid var(--border)!important;}
+[data-testid="stSidebar"] *{color:var(--t2)!important;}
+.stButton>button{background:linear-gradient(135deg,#1a3a6e,#0e2350)!important;
+  color:var(--sky)!important;border:1px solid rgba(56,189,248,.3)!important;
+  border-radius:8px!important;font-family:var(--sans)!important;font-weight:600!important;transition:all .18s!important;}
+.stButton>button:hover{background:linear-gradient(135deg,#1e4a8a,#1432a0)!important;
+  box-shadow:0 4px 20px rgba(56,189,248,.2)!important;transform:translateY(-1px)!important;}
+.stButton>button:disabled{opacity:.4!important;transform:none!important;}
+.stTextInput>div>div>input,.stNumberInput>div>div>input{
+  background:#131928!important;border:1px solid #253050!important;color:var(--t1)!important;
+  border-radius:7px!important;font-family:var(--mono)!important;}
+.stSelectbox>div>div{background:#131928!important;border-color:#253050!important;}
+.stTabs [role="tablist"]{background:#0f1320;border:1px solid #1e2740;border-radius:10px;padding:3px;}
+.stTabs [role="tab"]{color:#5c6a88!important;border-radius:7px!important;font-family:var(--sans)!important;font-weight:600!important;}
+.stTabs [aria-selected="true"]{background:#131928!important;color:var(--sky)!important;}
+.stDataFrame{border-radius:10px!important;overflow:hidden;}
+div[data-testid="stInfo"]{background:rgba(56,189,248,.07)!important;border:1px solid rgba(56,189,248,.2)!important;}
+div[data-testid="stSuccess"]{background:rgba(52,211,153,.07)!important;border:1px solid rgba(52,211,153,.2)!important;}
+div[data-testid="stWarning"]{background:rgba(251,191,36,.07)!important;border:1px solid rgba(251,191,36,.2)!important;}
+div[data-testid="stError"]{background:rgba(248,113,113,.07)!important;border:1px solid rgba(248,113,113,.2)!important;}
+.stProgress>div>div{background:linear-gradient(90deg,var(--sky),var(--sage))!important;}
+#MainMenu,footer,header{visibility:hidden!important;}
+div[data-baseweb="slider"]>div{background:#253050!important;}
+div[data-baseweb="slider"]>div>div{background:var(--sky)!important;}
 
-def _scan_update(**kw):
-    """Thread-safe write to _SCAN."""
-    with _SCAN_LOCK:
-        for k, v in kw.items():
-            _SCAN[k] = v
-
-def _scan_log(msg: str):
-    with _SCAN_LOCK:
-        _SCAN["log"].append(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
-
-def init_state():
-    defaults = {
-        "results":        [],
-        "scan_running":   False,
-        "scan_progress":  0.0,
-        "scan_msg":       "",
-        "scan_stats":     {"total": 0, "processed": 0, "passed": 0, "perfect": 0},
-        "universe":       [],
-        "universe_stats": {},
-        "scan_done":      False,
-        "exch_filter":    "All",
-        "last_scan_time": None,
-        "token_status":   "unknown",
-        "dl_running":     False,
-        "dl_msg":         "",
-        "dl_error":       "",   # "unknown" | "valid" | "invalid"
-        "token_user":     "",
-        "download_error": "",
-        "download_log":   [],
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-init_state()
+.hdr{background:linear-gradient(135deg,#0e1525,#131928);border:1px solid #1e2740;
+  border-radius:12px;padding:20px 26px 16px;margin-bottom:18px;position:relative;overflow:hidden;}
+.hdr::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--sky) 30%,var(--sage) 65%,var(--amber) 88%,transparent);}
+.hdr h1{font-weight:700;font-size:1.5rem;color:var(--t1);letter-spacing:-.3px;}
+.hdr .sub{font-family:var(--mono);font-size:.6rem;color:var(--t3);margin-top:5px;letter-spacing:.8px;}
+.slbl{font-family:var(--mono);font-size:.58rem;letter-spacing:2px;text-transform:uppercase;
+  color:var(--sky);border-left:2px solid var(--sky);padding-left:8px;margin:14px 0 9px;}
+.kpis{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.kpi{flex:1;min-width:90px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px;text-align:center;}
+.kpi .v{font-family:var(--mono);font-weight:700;font-size:1.6rem;line-height:1;}
+.kpi .l{font-size:.56rem;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-top:4px;}
+.csky{color:var(--sky);}.csage{color:var(--sage);}.camb{color:var(--amber);}
+.clav{color:var(--lav);}.ctang{color:var(--tang);}
+.sig{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;
+  font-family:var(--mono);font-size:.57rem;font-weight:500;margin:2px;}
+.sig-rs{background:rgba(56,189,248,.1);color:var(--sky);border:1px solid rgba(56,189,248,.25);}
+.sig-bz{background:rgba(251,146,60,.1);color:var(--tang);border:1px solid rgba(251,146,60,.25);}
+.sig-ac{background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.25);}
+.sig-sr{background:rgba(167,139,250,.1);color:var(--lav);border:1px solid rgba(167,139,250,.25);}
+.sig-ok{background:rgba(52,211,153,.12);color:var(--sage);border:1px solid rgba(52,211,153,.3);font-weight:700;}
+.scard{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:14px 16px;margin-bottom:8px;}
+.scard.hit{background:linear-gradient(160deg,#0f1d14,var(--card));border-color:rgba(52,211,153,.3);}
+.scard .ch{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.scard .sym{font-weight:700;font-size:1rem;color:var(--t1);}
+.scard .nm{font-size:.7rem;color:var(--t3);flex:1;}
+.scard .live-px{font-family:var(--mono);font-weight:700;font-size:1.05rem;color:var(--sage);margin-left:auto;}
+.scard .live-chg{font-family:var(--mono);font-size:.72rem;text-align:right;}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:5px;margin:10px 0;}
+.met{background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;}
+.met .ml{font-size:.55rem;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;}
+.met .mv{font-size:.84rem;font-weight:600;color:var(--t1);margin-top:2px;font-family:var(--mono);}
+.igrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px;}
+.ip{background:#0a0e1a;border:1px solid var(--border);border-radius:7px;padding:10px 12px;}
+.ip .il{font-family:var(--mono);font-size:.55rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;}
+.ip .iv{font-size:.78rem;font-weight:600;color:var(--t1);}
+.ip .is{font-family:var(--mono);font-size:.6rem;color:var(--t4);margin-top:3px;}
+.stair{display:flex;align-items:flex-end;gap:4px;height:70px;padding:5px 6px 0;
+  background:#0a0e1a;border:1px solid var(--border);border-radius:7px;margin:10px 0;}
+.scol{display:flex;flex-direction:column;align-items:center;flex:1;height:100%;justify-content:flex-end;}
+.sarr{font-size:.56rem;margin-bottom:2px;font-family:var(--mono);}
+.sbar{width:100%;border-radius:3px 3px 0 0;min-height:6px;display:flex;align-items:center;
+  justify-content:center;font-size:.56rem;font-weight:600;color:rgba(0,0,0,.9);}
+.slb{font-family:var(--mono);font-size:.52rem;color:var(--t4);margin-top:2px;}
+.prog-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;}
+.scanning{animation:blink 1.2s ease infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.4;}}
+</style>
+""", unsafe_allow_html=True)
 
 # ===========================================================================
-#  UPSTOX HELPERS  (sync — Streamlit is synchronous)
+#  THREAD-SAFE SCAN STATE
 # ===========================================================================
-def upstox_hdr(token: str) -> dict:
-    return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+import threading as _th
+_SCAN: dict = {"running":False,"progress":0.0,"msg":"","done":False,
+               "error":"","results":[],"log":[],
+               "stats":{"total":0,"processed":0,"passed":0,"perfect":0}}
+_LOCK = _th.Lock()
 
-def fetch_hist(ikey: str, token: str, days: int = 430) -> Optional[pd.DataFrame]:
-    to_d   = datetime.date.today()
-    from_d = to_d - datetime.timedelta(days=days)
-    url = (f"{UPSTOX_BASE}/historical-candle/{ikey}/day/"
-           f"{to_d.isoformat()}/{from_d.isoformat()}")
+def _su(**kw):
+    with _LOCK:
+        for k,v in kw.items(): _SCAN[k]=v
+
+def _sl(m):
+    with _LOCK:
+        _SCAN["log"].append(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {m}")
+
+# ===========================================================================
+#  SESSION STATE
+# ===========================================================================
+def _init():
+    for k,v in {
+        "results":[],"scan_running":False,"scan_done":False,"scan_error":"",
+        "last_scan_time":None,"exch_filter":"All",
+        "token_status":"unknown","token_user":"",
+        "dl_running":False,"dl_msg":"","dl_error":"",
+        "live_prices":{},"live_updated":None,
+    }.items():
+        if k not in st.session_state: st.session_state[k]=v
+_init()
+
+# ===========================================================================
+#  DATABASE
+# ===========================================================================
+def _db():
+    c = sqlite3.connect(str(DB_PATH),check_same_thread=False)
+    c.execute("""CREATE TABLE IF NOT EXISTS instruments(
+        ikey TEXT PRIMARY KEY, sym TEXT NOT NULL, name TEXT,
+        exch TEXT NOT NULL, segment TEXT, inst_type TEXT,
+        lot_size INTEGER DEFAULT 1, tick_size REAL DEFAULT 0.05,
+        isin TEXT, sector TEXT, expiry TEXT, added TEXT, updated TEXT)""")
+    c.execute("CREATE INDEX IF NOT EXISTS ix_e ON instruments(exch)")
+    c.execute("CREATE INDEX IF NOT EXISTS ix_s ON instruments(sym)")
+    c.execute("CREATE INDEX IF NOT EXISTS ix_t ON instruments(inst_type)")
+    for col in ["segment TEXT","inst_type TEXT","lot_size INTEGER DEFAULT 1",
+                "tick_size REAL DEFAULT 0.05","isin TEXT","sector TEXT",
+                "expiry TEXT","updated TEXT"]:
+        try: c.execute(f"ALTER TABLE instruments ADD COLUMN {col}")
+        except: pass
+    c.commit(); return c
+
+def db_count():
     try:
-        r = requests.get(url, headers=upstox_hdr(token), timeout=15)
-        if r.status_code != 200:
-            return None
-        candles = r.json().get("data", {}).get("candles", [])
-        if not candles or len(candles) < 30:
-            return None
-        df = pd.DataFrame(candles, columns=["ts","O","H","L","C","V","OI"])
-        df["ts"] = pd.to_datetime(df["ts"])
-        return df.sort_values("ts").reset_index(drop=True)
-    except Exception:
-        return None
+        c=_db()
+        t=c.execute("SELECT COUNT(*) FROM instruments").fetchone()[0]
+        n=c.execute("SELECT COUNT(*) FROM instruments WHERE exch='NSE'").fetchone()[0]
+        b=c.execute("SELECT COUNT(*) FROM instruments WHERE exch='BSE'").fetchone()[0]
+        c.close(); return {"total":t,"nse":n,"bse":b}
+    except: return {"total":0,"nse":0,"bse":0}
 
-def fetch_batch_ltp(keys: list, token: str) -> dict:
-    out = {}
-    for i in range(0, len(keys), QUOTE_BATCH):
-        batch = keys[i:i+QUOTE_BATCH]
+def db_load_all(exch=None,page=1,per=500):
+    try:
+        c=_db()
+        off=(page-1)*per
+        w=" WHERE exch=?" if exch else ""
+        p=[exch] if exch else []
+        rows=c.execute(f"SELECT ikey,sym,name,exch,segment,inst_type,lot_size,tick_size,isin,sector FROM instruments{w} ORDER BY sym LIMIT {per} OFFSET {off}",p).fetchall()
+        c.close()
+        return [{"ikey":r[0],"sym":r[1],"name":r[2],"exch":r[3],"segment":r[4],
+                 "inst_type":r[5],"lot_size":r[6],"tick_size":r[7],"isin":r[8],
+                 "sector":r[9] or ""} for r in rows]
+    except: return []
+
+def db_load_equity():
+    try:
+        c=_db()
+        rows=c.execute("""SELECT ikey,sym,name,exch,sector FROM instruments
+            WHERE (inst_type IN ('EQUITY','EQ') OR inst_type IS NULL OR inst_type='')
+            AND (expiry IS NULL OR expiry='')""").fetchall()
+        c.close()
+        return [{"ikey":r[0],"sym":r[1],"name":r[2],"exch":r[3],
+                 "sector":r[4] or "NSE_INDEX|Nifty 500"} for r in rows]
+    except: return []
+
+def db_total_count():
+    try:
+        c=_db(); t=c.execute("SELECT COUNT(*) FROM instruments").fetchone()[0]; c.close(); return t
+    except: return 0
+
+def db_save_many(rows):
+    if not rows: return
+    now=datetime.datetime.now().isoformat()
+    c=_db()
+    c.executemany(
+        "INSERT OR REPLACE INTO instruments(ikey,sym,name,exch,segment,inst_type,"
+        "lot_size,tick_size,isin,sector,expiry,added,updated)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,"
+        "COALESCE((SELECT added FROM instruments WHERE ikey=?),?),?)",
+        [(r["ikey"],r.get("sym",""),r.get("name",""),r.get("exch",""),
+          r.get("segment",""),r.get("inst_type",""),
+          int(r.get("lot_size") or 1), float(r.get("tick_size") or 0.05),
+          r.get("isin",""), r.get("sector",""), r.get("expiry",""),
+          r["ikey"], now, now) for r in rows])
+    c.commit(); c.close()
+
+def db_get_keys():
+    try:
+        c=_db(); k={r[0] for r in c.execute("SELECT ikey FROM instruments").fetchall()}
+        c.close(); return k
+    except: return set()
+
+# ===========================================================================
+#  INSTRUMENT DOWNLOAD — full CSV from Upstox developer portal
+# ===========================================================================
+def _fetch_sector_maps(token):
+    imap={}
+    hdrs={"User-Agent":"Mozilla/5.0"}
+    if token: hdrs["Authorization"]=f"Bearer {token}"
+    for idx_key,url in NSE_SECTOR_URLS.items():
         try:
-            r = requests.get(f"{UPSTOX_BASE}/market-quote/quotes",
-                headers=upstox_hdr(token),
-                params={"instrument_key": ",".join(batch)}, timeout=15)
-            if r.status_code == 200:
-                for v in r.json().get("data", {}).values():
-                    ltp  = v.get("last_price") or v.get("ltp")
-                    ikey = v.get("instrument_token") or v.get("instrument_key")
-                    if ltp and ikey:
-                        out[ikey] = float(ltp)
-        except Exception:
-            pass
+            r=requests.get(url,headers=hdrs,timeout=10)
+            if r.status_code==200:
+                for row in csv.DictReader(io.StringIO(r.text)):
+                    isin=(row.get("ISIN Code") or row.get("ISIN") or "").strip()
+                    if isin: imap[isin]=idx_key
+        except: pass
+        time.sleep(0.2)
+    return imap
+
+def _parse_csv_gz(raw_bytes, isin_sector):
+    """Parse gzipped CSV instrument master. Returns list of dicts."""
+    instruments=[]; seen=set()
+    try:
+        with gzip.open(io.BytesIO(raw_bytes),"rt",encoding="utf-8",errors="replace") as f:
+            reader=csv.DictReader(f)
+            for row in reader:
+                seg  =row.get("segment","")
+                itype=row.get("instrument_type","")
+                ikey =row.get("instrument_key","")
+                if not ikey or ikey in seen: continue
+                seen.add(ikey)
+                isin =row.get("isin","")
+                sym  =row.get("trading_symbol",row.get("tradingsymbol","")).upper().strip()
+                name =row.get("name","").strip() or sym
+                exch =row.get("exchange","")
+                if "NSE" in seg: exch="NSE"
+                elif "BSE" in seg: exch="BSE"
+                sector=isin_sector.get(isin,
+                    "NSE_INDEX|Nifty 500" if exch=="NSE" else "BSE_INDEX|S&P BSE 500")
+                instruments.append({
+                    "ikey":ikey,"sym":sym,"name":name[:40],"exch":exch,
+                    "segment":seg,"inst_type":itype,
+                    "lot_size":row.get("lot_size","1"),
+                    "tick_size":row.get("tick_size","0.05"),
+                    "isin":isin,"sector":sector,
+                    "expiry":row.get("expiry",""),
+                })
+    except Exception as e:
+        _sl(f"CSV parse error: {e}")
+    return instruments
+
+def _download_via_api(token, progress_cb=None):
+    """Fallback: use Upstox API /instruments endpoint."""
+    all_rows=[]
+    hdrs={"Authorization":f"Bearer {token}","Accept":"application/json"}
+    for exch_seg in ["NSE_EQ","BSE_EQ"]:
+        if progress_cb: progress_cb(0.3+0.1*(exch_seg=="BSE_EQ"),
+                                    f"API: fetching {exch_seg}...")
+        try:
+            r=requests.get(f"{UPSTOX_BASE}/instruments",headers=hdrs,
+                           params={"exchange":exch_seg},timeout=60)
+            if r.status_code==200:
+                data=r.json()
+                rows=(data.get("data") or data) if isinstance(data,dict) else data
+                if isinstance(rows,list):
+                    all_rows.extend(rows)
+                    if progress_cb: progress_cb(0.5,f"API: {len(all_rows):,} rows so far")
+            else:
+                _sl(f"API {exch_seg}: HTTP {r.status_code}")
+        except Exception as e:
+            _sl(f"API {exch_seg}: {e}")
+        time.sleep(0.3)
+    return all_rows
+
+def download_instruments_full(token, progress_cb=None):
+    """
+    Download the complete NSE+BSE instrument list from Upstox.
+    Strategy:
+      1. Fetch sector maps from NSE for ISIN->sector mapping
+      2. Try Upstox CDN gzip CSV (with and without token)
+      3. Fall back to Upstox V2 API /instruments endpoint
+      4. Parse and store ALL instruments (not just equity) to SQLite
+    """
+    # Step 1: Sector maps
+    if progress_cb: progress_cb(0.02,"Fetching NSE sector maps...")
+    isin_sector=_fetch_sector_maps(token)
+    if progress_cb: progress_cb(0.12,f"Sector maps: {len(isin_sector):,} ISINs")
+
+    # Step 2: Try CDN download
+    raw_bytes=None
+    for i,url in enumerate(INST_URLS):
+        if progress_cb: progress_cb(0.14+i*0.03,f"Trying CDN: {url.split('/')[-1]}...")
+        hdrs={
+            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept":"application/octet-stream,*/*",
+            "Referer":"https://upstox.com/",
+        }
+        if token: hdrs["Authorization"]=f"Bearer {token}"
+        try:
+            chunks,downloaded,total=[],0,0
+            with requests.get(url,headers=hdrs,stream=True,timeout=120) as resp:
+                if resp.status_code in (401,403,404):
+                    _sl(f"CDN {url}: HTTP {resp.status_code}"); continue
+                resp.raise_for_status()
+                total=int(resp.headers.get("Content-Length",0))
+                for chunk in resp.iter_content(65536):
+                    if chunk:
+                        chunks.append(chunk); downloaded+=len(chunk)
+                        if progress_cb and total>0:
+                            progress_cb(0.20+(downloaded/total)*0.45,
+                                f"Downloading {url.split('/')[-1]}: "
+                                f"{downloaded//1024:,} / {total//1024:,} KB")
+            if chunks:
+                raw_bytes=b"".join(chunks)
+                _sl(f"CDN success: {len(raw_bytes)//1024:,} KB from {url}")
+                break
+        except Exception as e:
+            _sl(f"CDN {url}: {e}"); continue
+
+    # Step 3: Parse or API fallback
+    instruments=[]
+    if raw_bytes:
+        if progress_cb: progress_cb(0.68,"Parsing instrument CSV...")
+        instruments=_parse_csv_gz(raw_bytes, isin_sector)
+        _sl(f"Parsed {len(instruments):,} instruments from CSV")
+    elif token:
+        if progress_cb: progress_cb(0.25,"CDN unavailable — using Upstox API /instruments...")
+        api_rows=_download_via_api(token, progress_cb)
+        if api_rows:
+            existing_keys=db_get_keys()
+            for row in api_rows:
+                ikey=(row.get("instrument_key") or row.get("key",""))
+                if not ikey or ikey in existing_keys: continue
+                seg=row.get("segment",""); exch=row.get("exchange","")
+                if "NSE" in seg or exch=="NSE": exch="NSE"
+                elif "BSE" in seg or exch=="BSE": exch="BSE"
+                isin=row.get("isin","")
+                sym=(row.get("trading_symbol") or row.get("tradingsymbol") or "").upper().strip()
+                name=row.get("name","") or sym
+                sector=isin_sector.get(isin,
+                    "NSE_INDEX|Nifty 500" if exch=="NSE" else "BSE_INDEX|S&P BSE 500")
+                instruments.append({
+                    "ikey":ikey,"sym":sym,"name":name[:40],"exch":exch,
+                    "segment":seg,"inst_type":row.get("instrument_type","EQ"),
+                    "lot_size":row.get("lot_size","1"),
+                    "tick_size":row.get("tick_size","0.05"),
+                    "isin":isin,"sector":sector,"expiry":row.get("expiry",""),
+                })
+
+    if not instruments:
+        return {"ok":False,"error":"All download methods failed. Check token and network.",
+                "total":db_total_count(),"new":0}
+
+    # Step 4: Save to DB in batches of 500
+    existing_keys=db_get_keys()
+    new_rows=[r for r in instruments if r["ikey"] not in existing_keys]
+    if progress_cb: progress_cb(0.70,f"Saving {len(new_rows):,} new instruments to DB...")
+
+    BATCH=500
+    for i in range(0,len(new_rows),BATCH):
+        db_save_many(new_rows[i:i+BATCH])
+        if progress_cb:
+            pct=0.70+(i/max(len(new_rows),1))*0.28
+            progress_cb(pct,f"Saved {min(i+BATCH,len(new_rows)):,} / {len(new_rows):,}...")
+
+    c=db_count()
+    if progress_cb:
+        progress_cb(1.0,
+            f"Done! {c['total']:,} total ({c['nse']:,} NSE + {c['bse']:,} BSE) | "
+            f"{len(new_rows):,} new this run")
+    return {"ok":True,"total":c["total"],"nse":c["nse"],"bse":c["bse"],
+            "new":len(new_rows),"error":""}
+
+# ===========================================================================
+#  UPSTOX LIVE DATA
+# ===========================================================================
+def _hdr(token): return {"Authorization":f"Bearer {token}","Accept":"application/json"}
+
+def fetch_ltp_batch(keys, token):
+    out={}
+    for i in range(0,len(keys),200):
+        batch=keys[i:i+200]
+        try:
+            r=requests.get(f"{UPSTOX_BASE}/market-quote/ltp",headers=_hdr(token),
+                params={"instrument_key":",".join(batch)},timeout=15)
+            if r.status_code==200:
+                for ikey,v in r.json().get("data",{}).items():
+                    ltp=v.get("last_price") or v.get("ltp")
+                    if ltp: out[ikey]=float(ltp)
+        except: pass
+        time.sleep(0.15)
+    return out
+
+def fetch_full_quotes(keys, token):
+    """Returns {ikey: {ltp, chg, pct, prev}}."""
+    out={}
+    for i in range(0,len(keys),100):
+        batch=keys[i:i+100]
+        try:
+            r=requests.get(f"{UPSTOX_BASE}/market-quote/quotes",headers=_hdr(token),
+                params={"instrument_key":",".join(batch)},timeout=15)
+            if r.status_code==200:
+                for ikey,v in r.json().get("data",{}).items():
+                    ltp=float(v.get("last_price") or 0)
+                    prev=float(v.get("ohlc",{}).get("close") or v.get("prev_close_price") or ltp)
+                    chg=ltp-prev; pct=(chg/prev*100) if prev else 0
+                    out[ikey]={"ltp":ltp,"chg":round(chg,2),"pct":round(pct,2),"prev":prev}
+        except: pass
         time.sleep(0.2)
     return out
 
-# ===========================================================================
-#  SYMBOL MASTER LISTS
-#  500 NSE symbols + 500 BSE scrip codes shipped in the app.
-#  These are resolved to full instrument details via Upstox API in batches of 50.
-#  The database grows incrementally — each resolved batch is stored in SQLite.
-# ===========================================================================
-
-# -- 500 NSE trading symbols --------------------------------------------------
-NSE_ALL = [  # ~900 NSE equity symbols — resolved 50 at a time via Upstox API
-    "5PAISA", "AAPL", "AARTIDRUG", "AARTIIND", "AARTIINDU", "AARTISURF", "AAVAS", "ABAN", "ABB", "ABBOTINDIA",
-    "ABCAPITAL", "ABFRL", "ABMINTLEXP", "ACC", "ACCELYA", "ACCLTD", "ACMESOLAR", "ADANIENT", "ADANIGAS", "ADANIGREEN",
-    "ADANIPORTS", "ADANIPOWER", "ADANITRANS", "ADFFOODS", "ADHUNIK", "ADORWELD", "ADROITINDU", "ADVANCE", "AEGIS", "AEGISCHEM",
-    "AFCONS", "AFFLE", "AGEL", "AGI", "AGRITECH", "AGROTECH", "AHMEDABADSE", "AIA", "AIAENG", "AJANTPHARM",
-    "AJMERA", "AKZO", "AKZOINDIA", "ALEMBICLTD", "ALEMBICPHARM", "ALEXIONPHAR", "ALICON", "ALIVUS", "ALKEM", "ALKYL",
-    "ALKYLAMINE", "ALLCARGO", "ALOKIND", "ALPA", "ALPHAGEO", "ALSTOMIND", "AMARAJABAT", "AMBER", "AMBIKA", "AMBIKCO",
-    "AMBUJACEM", "AMFORGE", "AMJUMBOSEC", "AMRUTANJAN", "ANANDRATHI", "ANANTRAJ", "ANDHRABANK", "ANDHRACEMENT", "ANDHRSUGAR", "ANGELONE",
-    "ANIKINDSPIN", "ANKITMETAL", "ANMOLCHEM", "ANSAL", "ANTHEM", "ANUP", "ANUPAM", "APARINDS", "APEX", "APEXFROZEN",
-    "APLAPOLLO", "APOLLOHOSP", "APOLLOPIPE", "APOLLOTYRE", "APTUS", "ARCHIES", "ARCIL", "ARENTER", "ARFIN", "ARIHANT",
-    "ARJANCAP", "ARKADE", "ARMAN", "ARMANFIN", "ARNAV", "ARROW", "ARSHIYA", "ARTEDZ", "ARVIND", "ARVINDFASN",
-    "ARVSMART", "ASAHI", "ASALCBR", "ASHIANA", "ASHOKLEY", "ASIANHOTELSSE", "ASIANPAINT", "ASIANTILES", "ASTEC", "ASTERDM",
-    "ASTRA", "ASTRAL", "ASTRALMIND", "ATFL", "ATGL", "ATMASTCO", "AUBANK", "AURIONPRO", "AUROBINDO", "AUROPHARMA",
-    "AURUM", "AUTOAXLES", "AUTOLINE", "AUTOMOTIVEAxle", "AUTOSTRUT", "AVALON", "AVATARFIN", "AVENUE", "AVENUES", "AVONMORE",
-    "AVRO", "AWFIS", "AWL", "AXISBANK", "AXISCADES", "AYMSYNTEX", "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE", "BALAJI",
-    "BALAJITELE", "BALKRISIND", "BANDHANBNK", "BANKBARODA", "BANKINDIA", "BANKOFMAH", "BARBEQUE", "BATAIND", "BAYER", "BCCL",
-    "BDL", "BEL", "BEML", "BERGEPAINT", "BHARAT", "BHARATFORG", "BHARTIARTL", "BHEL", "BHIMJYOTI", "BIKAJI",
-    "BIOCON", "BIRLACORPN", "BIRLASOFT", "BLISSGVS", "BLUEDART", "BLUESTAR", "BOLLYCOM", "BOMBAY", "BOMDYEING", "BOSCHLTD",
-    "BPCL", "BRAINBEEES", "BRIGADE", "BRITANNIA", "BSNL", "BUILDCON", "BURGERKING", "BURNPUR", "CALYPSO", "CAMLIN",
-    "CAMPUS", "CAMS", "CANBK", "CANFINHOME", "CANTABIL", "CAPITALSFB", "CAPLIPOINT", "CARGOTRANS", "CARTRADE", "CCL",
-    "CEATLTD", "CENTRALBANK", "CENTURYPLY", "CENTURYREAL", "CESC", "CGPOWER", "CHALET", "CHAMBLFERT", "CHEMPLAST", "CHENNPETRO",
-    "CHOLAFIN", "CHOLAFINC", "CIGNITI", "CIPLA", "CLEAN", "COALINDIA", "COCHINSHIP", "COCKENERGY", "COFORGE", "COLPAL",
-    "CONCOR", "COROMANDEL", "CORPBANK", "COX", "CPCB", "CRAFTSMAN", "CREDITACC", "CROMPTON", "CSBBANK", "CUMMINS",
-    "CYIENT", "DABUR", "DALMIACEM", "DATAINFOSYS", "DATAMATICS", "DATAPATTNS", "DBCORP", "DCBBANK", "DCWLTD", "DECCANCEM",
-    "DEEPAKFERT", "DEEPAKNTR", "DEEPIND", "DELHIVERY", "DEN", "DENABANK", "DEVYANI", "DHANUKA", "DHARIVIT", "DIGISPICE",
-    "DISH", "DISHTV", "DIVI", "DIVISLAB", "DIXON", "DLF", "DMART", "DMCC", "DODLA", "DOLLAR",
-    "DONEAR", "DRREDDY", "DTDC", "DYNAMATECH", "EASEMYTRIP", "ECLERX", "EICHERMOT", "EIH", "EIHOTEL", "ELDECO",
-    "ELECON", "ELECTHERM", "ELGIEQUIP", "EMAAR", "ENDURANCE", "EPIGRAL", "EQUITASBNK", "ERIS", "EROS", "ESAFSFB",
-    "ESCORTS", "EXIDEIND", "FDC", "FEDERALBNK", "FENOPLAST", "FERMENTA", "FHHOTEL", "FINEORG", "FIVE100", "FORCE",
-    "FORTIS", "FRESHWORKS", "FRETAIL", "FSL", "FUSION", "GABRIEL", "GAIL", "GALAXY", "GALLANTT", "GARWARE",
-    "GATI", "GE", "GENESYS", "GHCL", "GICRE", "GIPCL", "GLAND", "GLAXO", "GLENMARK", "GMM",
-    "GMRINFRA", "GNFC", "GODAVARI", "GODREJCP", "GODREJPROP", "GOLDI", "GONTERMANN", "GPPL", "GRANULES", "GRASIM",
-    "GREENKO", "GREENPLY", "GRINDWELL", "GRSE", "GSFC", "GTPL", "GUJARATGAS", "GUJGASLTD", "GULSHAN", "HAL",
-    "HAPPSTMNDS", "HATSUN", "HAVELLS", "HBL", "HCC", "HCLINFOSYS", "HCLTECH", "HDFC", "HDFCAMC", "HDFCBANK",
-    "HDFCLIFE", "HEALTHVISTA", "HEIDELBERG", "HERITAGE", "HEROMOTOCO", "HESTER", "HEXAWARE", "HFCL", "HINDALCO", "HINDCOPPER",
-    "HINDOILEXP", "HINDPETRO", "HINDUNILVR", "HINDUSANDP", "HINDUSTAN", "HINDWARE", "HOMEFIRST", "HOTSTAR", "HPCL", "HTMEDIA",
-    "HUDCO", "IBREALEST", "IBULHSGFIN", "ICICIBANK", "ICICIGI", "ICICILOPRU", "IDEA", "IDEAFORGE", "IDFC", "IDFCFIRSTB",
-    "IFFCO", "IGL", "IIFL", "IIFLWAM", "IMAGICAA", "INDGRID", "INDHOTEL", "INDIACEM", "INDIAMART", "INDIGO",
-    "INDOCO", "INDUSINDBK", "INFIBEAM", "INFOBEANS", "INFOEDGE", "INFOSYS", "INFRATEL", "INFY", "INOX", "INOXLEISUR",
-    "INOXWIND", "INTELLECT", "INTERGLOBE", "IOB", "IOC", "IOLCP", "IPCA", "IPCALAB", "IRB", "IRCON",
-    "IRCTC", "IREDA", "IRFC", "ISGEC", "ITC", "IXIGO", "JAGRAN", "JAMNAUTO", "JANASFB", "JBMF",
-    "JINDALSTEL", "JIOCINEMA", "JKCEMENT", "JKLAKSHMI", "JKTYRE", "JSHL", "JSL", "JSWENERGY", "JSWSTEEL", "JTLIND",
-    "JUBLPHARMA", "JUPITERHSP", "JUSTDIAL", "JYOTI", "KAJARIACER", "KAKATIYA", "KALPATPOWR", "KALYANI", "KALYANISTEELS", "KALYANKJIL",
-    "KAMADHENU", "KAMAT", "KANDLAPORT", "KANSAINER", "KARURVYSYA", "KAVERI", "KAYNES", "KDDL", "KEC", "KELLTON",
-    "KERNEX", "KESORAMIND", "KFINTECH", "KHADIM", "KIMS", "KINETIC", "KIRLOSENG", "KIRLOSKAR", "KIRLPNU", "KOLTEPATIL",
-    "KOPRAN", "KOTAKBANK", "KPIL", "KPIT", "KRBL", "KRIBHCO", "KRSNAA", "KSOLVES", "KTKBANK", "LAKSHMI",
-    "LAKSHVIL", "LALPATHLAB", "LATENTVIEW", "LAURUSLABS", "LAXMIMACH", "LEATHIND", "LEELA", "LEMONTRE", "LIBERTY", "LICHOUSING",
-    "LICI", "LLOYDSME", "LODHA", "LT", "LTFH", "LTIM", "LTTS", "LUMAXTECH", "LUPIN", "LXCHEM",
-    "M&M", "M&MFIN", "MAHAVEER", "MAHFIN", "MAHINDCIE", "MAHINDHOLIDAYS", "MAHINDLOG", "MAHINDRA", "MAHINDSTEEL", "MAHLIFE",
-    "MAHLOG", "MAHSCOOTER", "MAHSEAMLESS", "MAKEMYTRIP", "MAKETRIP", "MANALI", "MANAPPURAM", "MANGCEM", "MANGLORE", "MANYAVAR",
-    "MAPMYINDIA", "MARICO", "MARKSANS", "MARUTI", "MASTECH", "MAWANASUG", "MAXHEALTH", "MAZDOCK", "MCDOWELL-N", "MCNALLY",
-    "MDL", "MEDPLUS", "MEP", "METALFORGE", "METRO", "METROPOLIS", "MFSL", "MGL", "MIDDAY", "MIDHANI",
-    "MINDA", "MINDAIND", "MINDTREE", "MIRAE", "MODAFIBERS", "MOIL", "MOREPEN", "MOTHERSON", "MOTILALOFS", "MPHASIS",
-    "MPSLTD", "MRF", "MRPL", "MSTEEL", "MTAR", "MTNL", "MUKANDLTD", "MUNJALAU", "MUTHOOTFIN", "NAGARFERT",
-    "NAHAR", "NALCO", "NANDAN", "NATCOPHARM", "NATIONAL", "NATIONALUM", "NAUKRI", "NAVINFLUOR", "NAVKAR", "NAVNIT",
-    "NAZARA", "NBCC", "NCC", "NCLTIND", "NDTV", "NECTAR", "NELCO", "NEOGEN", "NESCO", "NESTLEIND",
-    "NETSCRIBES", "NETWORK18", "NEWGEN", "NFL", "NHLIND", "NHPC", "NIACL", "NIITTECH", "NILKAMAL", "NIPPONLIFE",
-    "NITIN", "NKGSB", "NMDC", "NOCIL", "NTPC", "NUCLEUS", "NUVOCO", "NUZIVEEDU", "NYKAA", "OBC",
-    "OBEROIRLTY", "OFSS", "OILCOUNTUB", "OMAXE", "ONGC", "ONMOBILE", "OPTIEMUS", "OPTIMUS", "ORACLE", "ORDNANCE",
-    "ORIANA", "ORIENTBELL", "ORIENTCEM", "ORIENTELEC", "ORIENTGREEN", "ORIENTHOTEL", "PAGEIND", "PAISALOAN", "PANACEA", "PARADEEP",
-    "PARAS", "PARSVNATH", "PATEL", "PATINFOSYS", "PAUSHAK", "PAYTM", "PCBL", "PENINDUS", "PENNAR", "PERSISTENT",
-    "PETRONET", "PFC", "PFIZER", "PHILIPCARB", "PHOENIXLTD", "PHOTOQUIP", "PI", "PIDILITIND", "PIIND", "PIRAMALENT",
-    "PIRAMALPH", "PNB", "PNBHOUSING", "PNCINFRA", "PNGRURAL", "POLICYBZR", "POLYCAB", "POWERGRID", "POWRFINCO", "PPAP",
-    "PRAJ", "PRAKASH", "PRATAAP", "PRECISION", "PRECWIRE", "PREMIER", "PRESTIGE", "PRIAPISM", "PRISMJOHS", "PUNJABNB",
-    "PURVA", "PVR", "PVRL", "QUESS", "QUICKHEAL", "RACL", "RADAAN", "RADICO", "RAILTELI", "RAINBOW",
-    "RAJCEMENT", "RAJESHEXPO", "RAJRATAN", "RAJSREESUG", "RALLIS", "RAMCOCEM", "RAMCOSYS", "RANE", "RANEHOLDINGS", "RATEGAIN",
-    "RATNAMANI", "RAYMOND", "RBLBANK", "RCF", "RECLTD", "RELAXO", "RELCAPITAL", "RELIANCE", "RENEW", "REPCO",
-    "RITES", "RJIO", "RMSYSTEMS", "ROCKWOOL", "ROHITFERRO", "ROSSARI", "ROUTE", "ROYALORCH", "RPOWER", "RUPA",
-    "RUSTOMJEE", "RVNL", "SAATVIK", "SABTNL", "SADBHAV", "SAFEXPRESS", "SAGAR", "SAIL", "SAMVARDHANA", "SANGHVI",
-    "SANSERA", "SAPPHIRE", "SARASWAT", "SAREGAMA", "SARREINDIA", "SASKEN", "SATINFIN", "SBFC", "SBICARD", "SBILIFE",
-    "SBIN", "SCHAEFFLER", "SEATINGS", "SELAN", "SEQUEL", "SEQUENT", "SETCO", "SHALPAINTS", "SHEMAROO", "SHILPA",
-    "SHILPAMED", "SHIVAMAUTO", "SHOPPERSSTOP", "SHREDIGCEM", "SHREECEM", "SHREYAS", "SHRIRAM", "SHRIRAMCIT", "SHRIRAMFIN", "SHYAM",
-    "SHYAMMETL", "SIEMENS", "SIEVERT", "SIMBHOLI", "SINCLAIRS", "SINTERCOM", "SITI", "SJVN", "SKFINDIA", "SKIPPER",
-    "SMIFS", "SML", "SMSLIFE", "SNOWMAN", "SOBHA", "SOFTSOL", "SOLARA", "SOLARTOPI", "SOTC", "SOUTHBANK",
-    "SPANDANA", "SPENCERS", "SPGLOG", "SPICEJET", "SPORTKING", "SRESTHA", "SRF", "SRTRANSFIN", "SSIPL", "SSWL",
-    "STARCEMENT", "STARHEALTH", "STEELCASTINGS", "STEELXIND", "STERLINGTOOL", "STLTECH", "STOVEC", "STRIDES", "SUBHKAM", "SUBROS",
-    "SUDARSCHEM", "SUMITOMO", "SUNDARMFIN", "SUNDRM", "SUNDRMFAST", "SUNFLAG", "SUNPHA", "SUNPHARMA", "SUNTECK", "SUNTEK",
-    "SUNTV", "SUPRAJIT", "SUPREMEENG", "SURYODAY", "SUVENPHARM", "SUZLON", "SWARAJENG", "SWELECTES", "SWIGGY", "SYMPHONY",
-    "SYNDICATEBANK", "SYNGENE", "SYRMA", "TAJGVK", "TALBROS", "TANEJA", "TANGENERGY", "TANLA", "TATACHEM", "TATACOMM",
-    "TATACONSUM", "TATADIGITAL", "TATAELXSI", "TATAINVEST", "TATAMOTORS", "TATAPLAY", "TATAPOWER", "TATASKY", "TATASTEEL", "TCI",
-    "TCS", "TEAMGLOBAL", "TEAMLEASE", "TECHM", "TEJAS", "TEXMOPIPES", "TFCILTD", "THANGAMEDICAL", "THERMAX", "THIRU",
-    "THIRUMALCH", "THOMASCOOK", "THYROCARE", "TIGL", "TIINDIA", "TIMKEN", "TINPLATE", "TIPS", "TIPSIND", "TIRUPATIFL",
-    "TITAGARH", "TITAN", "TJSB", "TORNTPHARM", "TORNTPOWER", "TRACTORS", "TRANS", "TRANSPEK", "TRANSWARRANTY", "TREEHOUSE",
-    "TRENTLTD", "TRIDENT", "TRIGYN", "TRIVENI", "TTKHLTCR", "TTML", "TV18", "TVSMOTOR", "TVSSCS", "TVTODAY",
-    "UBL", "UCAL", "UCOBK", "UGROCAPITAL", "UJJIVAN", "UJJIVANSFB", "ULTRACEMCO", "UNIONBANK", "UNITDSPR", "UNITECH",
-    "UNITEDHOTELS", "UPGFACTORY", "URJAINDIA", "USHAMART", "USHAMARTIN", "UTIAMC", "UTTAM", "VAKRANGEE", "VALIANT", "VALMARK",
-    "VARDHMAN", "VARROC", "VBL", "VEDANT", "VEDL", "VGUARD", "VICEROY", "VIJAYABANK", "VIMTA", "VINATIORGA",
-    "VINDHYATEL", "VISA", "VISWPWR", "VMART", "VOLTAS", "VRLLOGISTIC", "VSTIND", "WAAREE", "WABCOINDIA", "WALCHAND",
-    "WALCHNDNAGR", "WEBSOL", "WELCORP", "WELSPUN", "WELSPUNIND", "WENDT", "WESTLIFE", "WHEELS", "WHIRLPOOL", "WINDLAS",
-    "WIPRO", "WOCKPHARMA", "WONDERLA", "WPIL", "WPIND", "XANDER", "XCHANGING", "YASH", "YATRA", "YESBANK",
-    "YODLEE", "ZEEL", "ZENSAR", "ZENSARTECH", "ZENTALIS", "ZFSTEERING", "ZODIAC", "ZOHO", "ZOMATO", "ZUARI",
-]
-
-
-# -- 500 BSE scrip codes -------------------------------------------------------
-BSE_ALL = [  # ~1000 BSE scrip codes — resolved 50 at a time via Upstox API
-    500002, 500003, 500008, 500010, 500012, 500014, 500017, 500020, 500022, 500023,
-    500025, 500027, 500031, 500032, 500034, 500038, 500040, 500043, 500045, 500047,
-    500048, 500049, 500052, 500055, 500057, 500059, 500061, 500063, 500065, 500067,
-    500071, 500073, 500075, 500079, 500082, 500084, 500086, 500087, 500088, 500092,
-    500093, 500095, 500096, 500097, 500101, 500103, 500104, 500106, 500109, 500110,
-    500112, 500113, 500114, 500116, 500120, 500123, 500124, 500125, 500126, 500127,
-    500128, 500129, 500130, 500133, 500135, 500136, 500137, 500138, 500143, 500145,
-    500146, 500147, 500148, 500150, 500152, 500153, 500154, 500155, 500157, 500158,
-    500163, 500164, 500166, 500168, 500171, 500172, 500174, 500176, 500178, 500180,
-    500182, 500183, 500185, 500186, 500187, 500188, 500189, 500190, 500191, 500193,
-    500194, 500196, 500197, 500199, 500200, 500201, 500202, 500205, 500208, 500209,
-    500215, 500217, 500218, 500219, 500220, 500222, 500223, 500224, 500227, 500228,
-    500229, 500230, 500232, 500233, 500234, 500237, 500238, 500239, 500241, 500242,
-    500243, 500244, 500245, 500247, 500248, 500251, 500252, 500253, 500255, 500257,
-    500258, 500261, 500262, 500263, 500264, 500267, 500269, 500271, 500275, 500276,
-    500277, 500278, 500279, 500280, 500283, 500284, 500285, 500287, 500289, 500290,
-    500292, 500295, 500296, 500297, 500298, 500299, 500300, 500302, 500303, 500304,
-    500305, 500306, 500307, 500308, 500310, 500311, 500312, 500313, 500315, 500316,
-    500317, 500318, 500319, 500320, 500321, 500322, 500323, 500325, 500327, 500328,
-    500329, 500330, 500331, 500332, 500333, 500335, 500336, 500337, 500338, 500339,
-    500340, 500341, 500342, 500344, 500345, 500346, 500347, 500350, 500351, 500354,
-    500355, 500357, 500358, 500359, 500361, 500362, 500363, 500364, 500365, 500366,
-    500368, 500370, 500372, 500373, 500374, 500375, 500376, 500377, 500378, 500380,
-    500383, 500385, 500386, 500387, 500388, 500390, 500392, 500393, 500394, 500395,
-    500396, 500397, 500398, 500400, 500401, 500402, 500403, 500404, 500405, 500406,
-    500408, 500409, 500410, 500412, 500413, 500415, 500416, 500417, 500420, 500423,
-    500425, 500426, 500429, 500430, 500431, 500432, 500433, 500436, 500437, 500438,
-    500439, 500440, 500443, 500444, 500447, 500448, 500449, 500450, 500452, 500454,
-    500455, 500456, 500457, 500459, 500462, 500463, 500465, 500466, 500467, 500469,
-    500470, 500471, 500472, 500474, 500475, 500477, 500480, 500481, 500483, 500485,
-    500486, 500488, 500490, 500493, 500495, 500496, 500497, 500498, 500500, 500501,
-    500503, 500505, 500510, 500520, 500696, 500875, 505200, 507685, 510043, 510149,
-    510150, 510180, 510234, 510292, 510298, 510430, 510580, 511218, 511243, 511288,
-    511289, 511308, 511390, 511501, 511584, 511600, 512048, 512070, 512093, 512149,
-    512163, 512165, 512179, 512196, 512207, 512237, 512319, 512381, 512413, 512447,
-    512455, 512493, 512528, 512555, 512559, 512573, 512579, 512597, 512599, 512606,
-    512607, 512618, 512629, 512645, 512671, 512679, 513375, 513434, 513469, 513509,
-    513519, 513534, 513536, 513540, 514043, 514175, 514272, 514280, 514302, 514314,
-    514368, 514375, 515030, 515043, 515059, 515093, 516030, 516092, 517326, 517354,
-    517496, 518030, 518090, 519570, 520077, 521137, 521228, 523395, 523464, 523479,
-    523482, 523486, 523497, 523506, 523507, 523508, 523510, 523512, 523516, 523523,
-    523526, 523528, 523531, 523532, 523533, 523537, 523538, 523540, 523547, 523550,
-    523551, 523552, 523554, 523558, 523566, 523574, 523586, 523598, 523604, 523608,
-    523612, 523616, 523618, 523620, 523624, 523628, 523630, 523634, 523642, 523648,
-    523658, 523660, 523666, 523672, 523683, 523685, 524004, 524006, 524012, 524014,
-    524028, 524030, 524078, 524080, 524084, 524097, 524100, 524109, 524119, 524135,
-    524139, 524143, 524148, 524158, 524162, 524168, 524174, 524180, 524192, 524200,
-    524205, 524210, 524230, 524235, 524258, 524260, 524280, 524285, 524296, 524300,
-    524302, 524305, 524309, 524321, 524330, 524336, 524348, 524361, 524362, 524370,
-    524372, 524404, 524410, 524444, 524448, 524456, 524461, 524462, 524468, 524474,
-    524496, 524510, 524530, 524532, 524539, 524540, 524551, 524570, 524589, 524604,
-    524635, 524648, 524676, 524679, 524700, 524704, 524707, 524715, 524717, 524742,
-    524753, 524804, 526153, 526299, 526371, 526403, 530965, 531162, 531642, 532134,
-    532155, 532174, 532175, 532187, 532215, 532228, 532281, 532283, 532296, 532340,
-    532343, 532344, 532400, 532424, 532447, 532454, 532461, 532466, 532469, 532477,
-    532483, 532488, 532493, 532497, 532500, 532510, 532515, 532522, 532523, 532524,
-    532525, 532527, 532532, 532533, 532534, 532536, 532538, 532539, 532540, 532541,
-    532543, 532547, 532548, 532549, 532550, 532553, 532555, 532557, 532564, 532570,
-    532595, 532603, 532616, 532620, 532622, 532628, 532629, 532630, 532648, 532659,
-    532672, 532681, 532683, 532684, 532690, 532691, 532692, 532693, 532695, 532697,
-    532698, 532699, 532700, 532703, 532705, 532708, 532712, 532714, 532715, 532716,
-    532717, 532719, 532720, 532725, 532726, 532728, 532730, 532733, 532736, 532737,
-    532738, 532741, 532746, 532747, 532748, 532749, 532750, 532752, 532754, 532755,
-    532759, 532765, 532771, 532772, 532778, 532779, 532790, 532800, 532801, 532802,
-    532803, 532805, 532809, 532811, 532813, 532814, 532819, 532822, 532827, 532828,
-    532829, 532832, 532834, 532835, 532836, 532837, 532841, 532843, 532844, 532845,
-    532848, 532851, 532854, 532855, 532858, 532860, 532865, 532866, 532867, 532868,
-    532870, 532873, 532874, 532875, 532876, 532877, 532878, 532879, 532880, 532882,
-    532883, 532884, 532885, 532887, 532888, 532889, 532890, 532893, 532898, 532900,
-    532903, 532906, 532908, 532909, 532910, 532912, 532916, 532920, 532921, 532922,
-    532924, 532925, 532927, 532929, 532930, 532931, 532932, 532933, 532934, 532935,
-    532936, 532938, 532939, 532940, 532941, 532942, 532943, 532944, 532945, 532946,
-    532947, 532948, 532977, 532978, 532979, 532980, 532983, 533033, 533047, 533069,
-    533122, 533148, 533150, 533155, 533158, 533162, 533170, 533177, 533179, 533192,
-    533229, 533239, 533246, 533261, 533271, 533274, 533287, 533288, 533300, 533303,
-    533312, 533313, 533320, 533339, 533343, 533344, 533345, 533346, 533350, 533357,
-    533358, 533359, 533360, 533363, 533364, 533373, 533375, 533396, 533398, 533401,
-    533416, 533426, 533427, 533428, 533429, 533430, 533431, 533432, 533433, 533434,
-    533445, 533465, 533487, 533490, 533498, 533520, 533523, 533532, 533533, 533546,
-    533573, 533574, 533581, 533582, 533590, 533592, 533598, 533600, 534091, 534096,
-    534592, 535030, 535033, 535034, 535037, 535041, 535048, 535056, 535057, 535065,
-    535068, 535078, 535110, 535276, 535345, 535355, 535369, 535373, 535401, 535462,
-    535469, 535487, 535491, 535498, 535508, 535540, 535554, 535566, 535567, 535601,
-    535623, 535648, 535656, 535672, 535801, 536276, 536343, 539838, 539869, 540005,
-    540065, 540115, 540173, 540176, 540180, 540376, 540611, 540716, 540719, 540777,
-    541143, 541154, 541163, 541167, 541176, 541404, 541450, 541506, 541557, 541569,
-    541596, 541636, 541729, 541770, 541862, 542024, 542028, 542048, 542065, 542066,
-    542067, 542147, 542152, 542167, 542174, 542200, 542203, 542216, 542235, 542261,
-    542280, 542289, 542310, 542337, 542340, 542346, 542395, 542403, 542412, 542413,
-    542414, 542420, 542440, 542448, 542453, 542460, 542469, 542479, 542502, 542507,
-    542508, 542512, 542518, 542519, 542522, 542524, 542529, 542530, 542531, 542532,
-    542534, 542535, 542536, 542542, 542543, 542544, 542545, 542550, 542551, 542552,
-    542553, 542554, 542556, 542557, 542558, 542560, 542561, 542563, 542565, 542566,
-    542569, 542577, 542578, 542579, 542583, 542587, 542588, 542591, 542599, 542610,
-    542616, 542625, 542626, 542629, 542630, 542641, 542645, 542647, 542648, 542649,
-    542650, 542651, 542652, 542653, 542659, 542672, 542674, 542697, 542761, 542765,
-    542768, 542769, 542770, 542771, 542772, 542773, 542774, 542775, 542776, 542777,
-    542784, 542795, 542821, 542830, 542831, 542832, 543102, 543234, 543320, 543321,
-    543388, 543390, 543401, 543429, 543434, 543458, 543479, 543484, 543520, 543530,
-    543533, 543556, 543566, 543600, 543603, 543628, 543633, 543647, 543664, 543672,
-    543673, 543700, 543712, 543729, 543732, 543737, 543742, 543750, 543754, 543764,
-    543768, 543772, 543785, 543787, 543796, 543806, 543820, 543826, 543837, 543840,
-    543846, 543851, 543876, 543890, 543896, 543898, 543900, 543910, 543920, 543929,
-    543932, 543940, 543950, 543953, 543960, 543973, 543990, 544002, 544008, 544016,
-    544022, 544030, 544038, 544050, 544058, 544067, 544076, 544082, 544092, 544100,
-    544109, 544117, 544126, 544133, 544142, 544150, 544162, 544170, 544178, 544182,
-    544190, 544197, 544203, 544211, 544218, 544226, 544233,
-]
-
-
-# -- SQLite database for universe ----------------------------------------------
-DB_PATH = Path("universe.db")
-
-def _db_conn():
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS instruments (
-            ikey    TEXT PRIMARY KEY,
-            sym     TEXT NOT NULL,
-            name    TEXT,
-            exch    TEXT NOT NULL,
-            sector  TEXT,
-            isin    TEXT,
-            lot_size INTEGER DEFAULT 1,
-            tick_size REAL DEFAULT 0.05,
-            added   TEXT,
-            updated TEXT
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_exch   ON instruments(exch)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_sym    ON instruments(sym)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_sector ON instruments(sector)")
-    # Add new columns to existing DB if upgrading
-    for col_def in [
-        "ALTER TABLE instruments ADD COLUMN lot_size  INTEGER DEFAULT 1",
-        "ALTER TABLE instruments ADD COLUMN tick_size REAL    DEFAULT 0.05",
-        "ALTER TABLE instruments ADD COLUMN updated   TEXT",
-    ]:
-        try:
-            conn.execute(col_def)
-        except Exception:
-            pass  # Column already exists
-    conn.commit()
-    return conn
-
-def db_count() -> dict:
-    """Return {total, nse, bse} counts from DB."""
+def fetch_hist(ikey, token, days=430):
+    td=datetime.date.today(); fd=td-datetime.timedelta(days=days)
     try:
-        conn = _db_conn()
-        total = conn.execute("SELECT COUNT(*) FROM instruments").fetchone()[0]
-        nse   = conn.execute("SELECT COUNT(*) FROM instruments WHERE exch='NSE'").fetchone()[0]
-        bse   = conn.execute("SELECT COUNT(*) FROM instruments WHERE exch='BSE'").fetchone()[0]
-        conn.close()
-        return {"total": total, "nse": nse, "bse": bse}
-    except Exception:
-        return {"total": 0, "nse": 0, "bse": 0}
+        r=requests.get(f"{UPSTOX_BASE}/historical-candle/{ikey}/day/{td}/{fd}",
+            headers=_hdr(token),timeout=15)
+        if r.status_code!=200: return None
+        candles=r.json().get("data",{}).get("candles",[])
+        if not candles or len(candles)<25: return None
+        df=pd.DataFrame(candles,columns=["ts","O","H","L","C","V","OI"])
+        df["ts"]=pd.to_datetime(df["ts"])
+        return df.sort_values("ts").reset_index(drop=True)
+    except: return None
 
-def db_load_all() -> list:
-    """Load all instruments from DB as list of dicts."""
+def verify_token(token):
     try:
-        conn  = _db_conn()
-        rows  = conn.execute(
-            "SELECT ikey,sym,name,exch,sector,isin FROM instruments"
-        ).fetchall()
-        conn.close()
-        return [{"ikey":r[0],"sym":r[1],"name":r[2],"exch":r[3],
-                 "sector":r[4],"isin":r[5]} for r in rows]
-    except Exception:
-        return []
-
-def db_save_batch(stocks: list):
-    """Insert/replace a batch of stocks into DB."""
-    if not stocks:
-        return
-    conn = _db_conn()
-    now  = datetime.datetime.now().isoformat()
-    conn.executemany(
-        "INSERT OR REPLACE INTO instruments(ikey,sym,name,exch,sector,isin,added,updated)"
-        " VALUES(?,?,?,?,?,?,?,?)",
-        [(s["ikey"], s["sym"], s["name"], s["exch"],
-          s.get("sector",""), s.get("isin",""), now, now) for s in stocks]
-    )
-    conn.commit()
-    conn.close()
-
-def db_get_existing_keys() -> set:
-    """Return set of all ikeys already in DB."""
-    try:
-        conn  = _db_conn()
-        keys  = {r[0] for r in conn.execute("SELECT ikey FROM instruments").fetchall()}
-        conn.close()
-        return keys
-    except Exception:
-        return set()
-
-# -- Default universe (shown before any DB data) ----------------------------
-DEFAULT_UNIVERSE = [
- {"name":"TCS",         "sym":"TCS",        "ikey":"NSE_EQ|INE467B01029","sector":"NSE_INDEX|Nifty IT",    "exch":"NSE","isin":"INE467B01029"},
- {"name":"Infosys",     "sym":"INFY",       "ikey":"NSE_EQ|INE009A01021","sector":"NSE_INDEX|Nifty IT",    "exch":"NSE","isin":"INE009A01021"},
- {"name":"HDFC Bank",   "sym":"HDFCBANK",   "ikey":"NSE_EQ|INE040A01034","sector":"NSE_INDEX|Nifty Bank",  "exch":"NSE","isin":"INE040A01034"},
- {"name":"ICICI Bank",  "sym":"ICICIBANK",  "ikey":"NSE_EQ|INE090A01021","sector":"NSE_INDEX|Nifty Bank",  "exch":"NSE","isin":"INE090A01021"},
- {"name":"Reliance",    "sym":"RELIANCE",   "ikey":"NSE_EQ|INE002A01018","sector":"NSE_INDEX|Nifty Energy", "exch":"NSE","isin":"INE002A01018"},
- {"name":"Kotak Bank",  "sym":"KOTAKBANK",  "ikey":"NSE_EQ|INE237A01028","sector":"NSE_INDEX|Nifty Bank",  "exch":"NSE","isin":"INE237A01028"},
- {"name":"Axis Bank",   "sym":"AXISBANK",   "ikey":"NSE_EQ|INE238A01034","sector":"NSE_INDEX|Nifty Bank",  "exch":"NSE","isin":"INE238A01034"},
- {"name":"SBI",         "sym":"SBIN",       "ikey":"NSE_EQ|INE062A01020","sector":"NSE_INDEX|Nifty Bank",  "exch":"NSE","isin":"INE062A01020"},
- {"name":"Wipro",       "sym":"WIPRO",      "ikey":"NSE_EQ|INE075A01022","sector":"NSE_INDEX|Nifty IT",    "exch":"NSE","isin":"INE075A01022"},
- {"name":"HCL Tech",    "sym":"HCLTECH",    "ikey":"NSE_EQ|INE860A01027","sector":"NSE_INDEX|Nifty IT",    "exch":"NSE","isin":"INE860A01027"},
- {"name":"Sun Pharma",  "sym":"SUNPHARMA",  "ikey":"NSE_EQ|INE044A01036","sector":"NSE_INDEX|Nifty Pharma","exch":"NSE","isin":"INE044A01036"},
- {"name":"Bajaj Finance","sym":"BAJFINANCE","ikey":"NSE_EQ|INE296A01024","sector":"NSE_INDEX|Nifty Financial Services","exch":"NSE","isin":"INE296A01024"},
- {"name":"Maruti",      "sym":"MARUTI",     "ikey":"NSE_EQ|INE585B01010","sector":"NSE_INDEX|Nifty Auto",  "exch":"NSE","isin":"INE585B01010"},
- {"name":"Tata Motors", "sym":"TATAMOTORS", "ikey":"NSE_EQ|INE155L01022","sector":"NSE_INDEX|Nifty Auto",  "exch":"NSE","isin":"INE155L01022"},
- {"name":"NTPC",        "sym":"NTPC",       "ikey":"NSE_EQ|INE733E01010","sector":"NSE_INDEX|Nifty Energy", "exch":"NSE","isin":"INE733E01010"},
- {"name":"ONGC",        "sym":"ONGC",       "ikey":"NSE_EQ|INE213A01029","sector":"NSE_INDEX|Nifty Energy", "exch":"NSE","isin":"INE213A01029"},
- {"name":"Tata Steel",  "sym":"TATASTEEL",  "ikey":"NSE_EQ|INE081A01020","sector":"NSE_INDEX|Nifty Metal",  "exch":"NSE","isin":"INE081A01020"},
- {"name":"ITC",         "sym":"ITC",        "ikey":"NSE_EQ|INE154A01025","sector":"NSE_INDEX|Nifty FMCG",  "exch":"NSE","isin":"INE154A01025"},
- {"name":"HUL",         "sym":"HINDUNILVR", "ikey":"NSE_EQ|INE030A01027","sector":"NSE_INDEX|Nifty FMCG",  "exch":"NSE","isin":"INE030A01027"},
- {"name":"Bharti Airtel","sym":"BHARTIARTL","ikey":"NSE_EQ|INE397D01024","sector":"NSE_INDEX|Nifty 50",    "exch":"NSE","isin":"INE397D01024"},
-]
-
-# Sector heuristic for NSE symbols without ISIN lookup
-_SECTOR_MAP = {
-    "IT": ("NSE_INDEX|Nifty IT", ["TCS","INFY","WIPRO","HCLTECH","TECHM","LTIM","MPHASIS",
-           "COFORGE","PERSISTENT","KPIT","LTTS","OFSS","TATAELXSI","CYIENT","BIRLASOFT",
-           "ZENSARTECH","INTELLECT","HAPPSTMNDS","NEWGEN","TANLA","RATEGAIN","LATENTVIEW"]),
-    "BANK": ("NSE_INDEX|Nifty Bank", ["HDFCBANK","ICICIBANK","KOTAKBANK","AXISBANK","SBIN",
-             "INDUSINDBK","BANDHANBNK","FEDERALBNK","IDFCFIRSTB","AUBANK","RBLBANK","YESBANK",
-             "CANBK","BANKBARODA","PNB","UNIONBANK","INDIANB","KARURVYSYA","DCBBANK","CSBBANK"]),
-    "FMCG": ("NSE_INDEX|Nifty FMCG", ["HINDUNILVR","ITC","NESTLEIND","BRITANNIA","DABUR",
-              "MARICO","GODREJCP","COLPAL","EMAMILTD","TATACONSUM","JUBLFOODS","VBL"]),
-    "AUTO": ("NSE_INDEX|Nifty Auto", ["MARUTI","TATAMOTORS","M&M","BAJAJ-AUTO","EICHERMOT",
-              "HEROMOTOCO","ASHOKLEY","MOTHERSON","TVSMOTOR","BHARATFORG","BALKRISIND",
-              "BOSCHLTD","EXIDEIND","CEATLTD","MRF","APOLLOTYRE","JKTYRE"]),
-    "PHARMA": ("NSE_INDEX|Nifty Pharma", ["SUNPHARMA","DRREDDY","CIPLA","DIVISLAB","AUROPHARMA",
-               "TORNTPHARM","LUPIN","BIOCON","ABBOTINDIA","ALKEM","IPCALAB","LALPATHLAB",
-               "METROPOLIS","MAXHEALTH","APOLLOHOSP","GLENMARK","AJANTPHARM","GRANULES"]),
-    "ENERGY": ("NSE_INDEX|Nifty Energy", ["RELIANCE","ONGC","IOC","BPCL","POWERGRID","NTPC",
-               "GAIL","PETRONET","HINDPETRO","MRPL","GUJARATGAS","IGL","MGL","ADANIGREEN",
-               "TATAPOWER","TORNTPOWER","NHPC","SJVN","ADANIPOWER","CESC"]),
-    "METAL": ("NSE_INDEX|Nifty Metal", ["TATASTEEL","HINDALCO","JSWSTEEL","SAIL","NMDC",
-              "VEDL","NATIONALUM","APLAPOLLO","JINDALSTEL","RATNAMANI","MOIL","COALINDIA"]),
-    "FIN": ("NSE_INDEX|Nifty Financial Services", ["BAJFINANCE","BAJAJFINSV","CHOLAFIN",
-            "MUTHOOTFIN","MANAPPURAM","LICHOUSING","SHRIRAMFIN","M&MFIN","HDFCLIFE",
-            "SBILIFE","ICICIGI","ICICILOPRU"]),
-    "REALTY": ("NSE_INDEX|Nifty Realty", ["DLF","LODHA","GODREJPROP","PRESTIGE","OBEROIRLTY",
-               "PHOENIXLTD","BRIGADE","SOBHA","KOLTEPATIL"]),
-    "CAPGOODS": ("NSE_INDEX|Nifty 50", ["SIEMENS","ABB","BHEL","CUMMINS","THERMAX","KEC",
-                 "CGPOWER","DIXON","AMBER","KAYNES","HAVELLS","VOLTAS","BLUESTAR"]),
-}
-_SYM_SECTOR = {}
-for sec_key, (idx, syms) in _SECTOR_MAP.items():
-    for s in syms:
-        _SYM_SECTOR[s] = idx
-
-def _guess_sector_nse(sym: str) -> str:
-    return _SYM_SECTOR.get(sym, "NSE_INDEX|Nifty 500")
-
-def _guess_sector_bse(sym: str) -> str:
-    nse_sec = _SYM_SECTOR.get(sym, "NSE_INDEX|Nifty 500")
-    return nse_sec.replace("NSE_INDEX|Nifty", "BSE_INDEX|S&P BSE")
-
-
-# ===========================================================================
-#  UNIVERSE LOADING
-# ===========================================================================
-@st.cache_data(ttl=120, show_spinner=False)
-def load_universe_cache() -> list:
-    """Load from DB if available, else DEFAULT_UNIVERSE."""
-    db_stocks = db_load_all()
-    if db_stocks:
-        return db_stocks
-    return DEFAULT_UNIVERSE
-
-def _db_progress() -> str:
-    c = db_count()
-    if c["total"] == 0:
-        return "DB empty — click Download to build"
-    return (f"DB: {c['total']:,} stocks  "
-            f"({c['nse']:,} NSE + {c['bse']:,} BSE)")
-
-
-# ===========================================================================
-#  BATCH DOWNLOADER  — 50 NSE + 50 BSE per round, stored to SQLite
-# ===========================================================================
-
-def _upstox_get(endpoint: str, token: str, params: dict, timeout: int = 15):
-    """Shared Upstox GET. Returns (status_code, json_body, error_str)."""
-    hdrs = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    try:
-        r = requests.get(f"{UPSTOX_BASE}/{endpoint}", headers=hdrs,
-                         params=params, timeout=timeout)
-        return r.status_code, (r.json() if r.content else {}), ""
-    except Exception as e:
-        return 0, {}, str(e)
-
-
-def _resolve_batch(instrument_keys: list, token: str, exch: str) -> tuple:
-    """
-    Resolve instrument keys via /ltp (works 24x7) with /quotes fallback.
-    Returns (stocks_list, error_str).
-    """
-    if not instrument_keys:
-        return [], ""
-    results = []
-
-    status, body, err = _upstox_get(
-        "market-quote/ltp", token,
-        {"instrument_key": ",".join(instrument_keys)}
-    )
-
-    if status == 200:
-        data = body.get("data", {})
-    elif status in (401, 403):
-        return [], f"Auth error HTTP {status} — token expired or invalid"
-    else:
-        # Fallback to /quotes
-        status2, body2, err2 = _upstox_get(
-            "market-quote/quotes", token,
-            {"instrument_key": ",".join(instrument_keys)}
-        )
-        if status2 == 200:
-            data = body2.get("data", {})
-        else:
-            return [], f"HTTP {status}/{status2}: {err or err2}"
-
-    if not data:
-        # Build minimal records from keys so they are still stored
-        for ikey in instrument_keys:
-            parts = ikey.split("|")
-            raw   = parts[1] if len(parts) > 1 else ikey
-            results.append({
-                "ikey": ikey, "sym": raw.upper(), "name": raw.upper(),
-                "exch": exch, "sector": _guess_sector_nse(raw) if exch=="NSE" else _guess_sector_bse(raw),
-                "isin": "",
-            })
-        return results, "empty_data_used_key_only"
-
-    for ikey, info in data.items():
-        sym  = (info.get("symbol") or info.get("trading_symbol") or
-                ikey.replace(f"{exch}_EQ|","").split("|")[0])
-        name = (info.get("company_name") or info.get("name") or
-                info.get("instrument_name") or sym)
-        results.append({
-            "ikey":   ikey,
-            "sym":    sym.upper().strip(),
-            "name":   (name or sym)[:40],
-            "exch":   exch,
-            "sector": _guess_sector_nse(sym) if exch=="NSE" else _guess_sector_bse(sym),
-            "isin":   info.get("isin",""),
-        })
-    return results, ""
-
-
-def _resolve_nse_batch(syms: list, token: str) -> tuple:
-    return _resolve_batch([f"NSE_EQ|{s}" for s in syms], token, "NSE")
-
-
-def _resolve_bse_batch(codes: list, token: str) -> tuple:
-    return _resolve_batch([f"BSE_EQ|{c}" for c in codes], token, "BSE")
-
-
-def download_universe_batches(token: str, progress_cb=None) -> dict:
-    """
-    Download stocks 50 NSE + 50 BSE at a time, store each batch to SQLite.
-
-    Algorithm:
-    -----------------------------------------------------------------
-    1. Load NSE_ALL symbols and BSE_ALL scrip codes
-    2. Skip any already in DB (resume-safe)
-    3. Walk both lists simultaneously in BATCH_SIZE=50 chunks
-    4. For each chunk: resolve via Upstox market-quote/quotes API
-    5. Save resolved stocks to DB immediately after each chunk
-    6. Report progress after each batch
-    -----------------------------------------------------------------
-    Returns {ok, nse_added, bse_added, total_in_db, errors}
-    """
-    BATCH = 50
-    existing = db_get_existing_keys()
-
-    # Build pending lists (skip already resolved)
-    nse_pending = [s for s in NSE_ALL  if f"NSE_EQ|{s}" not in existing]
-    bse_pending = [c for c in BSE_ALL  if f"BSE_EQ|{c}" not in existing]
-
-    total_pending = len(nse_pending) + len(bse_pending)
-    if total_pending == 0:
-        msg = f"✅ All stocks already in DB — {db_count()['total']:,} total"
-        if progress_cb:
-            progress_cb(1.0, msg)
-        return {"ok": True, "nse_added": 0, "bse_added": 0,
-                "total_in_db": db_count()["total"], "errors": []}
-
-    nse_added = bse_added = 0
-    done      = 0
-    errors    = []
-
-    # NSE batches
-    nse_batches = [nse_pending[i:i+BATCH] for i in range(0, len(nse_pending), BATCH)]
-    bse_batches = [bse_pending[i:i+BATCH] for i in range(0, len(bse_pending), BATCH)]
-    total_batches = len(nse_batches) + len(bse_batches)
-    batch_num     = 0
-
-
-    # ---- NSE batches -------------------------------------------------------
-    for batch in nse_batches:
-        batch_num += 1
-        pct = done / max(total_pending, 1)
-        lbl = f"{batch[0]}...{batch[-1]}"
-        if progress_cb:
-            progress_cb(pct,
-                f"NSE batch {batch_num}/{len(nse_batches)}: {lbl} | "
-                f"{nse_added} NSE + {bse_added} BSE saved so far")
-        try:
-            stocks, err = _resolve_nse_batch(batch, token)
-            if err and "Auth error" in err:
-                errors.append(err); break
-            if err and err != "empty_data_used_key_only":
-                errors.append(f"NSE {lbl}: {err}")
-            if stocks:
-                db_save_batch(stocks)
-                nse_added += len(stocks)
-        except Exception as e:
-            errors.append(f"NSE {lbl}: {e}")
-        done += len(batch)
-        time.sleep(0.25)
-
-    # ---- BSE batches -------------------------------------------------------
-    for batch in bse_batches:
-        batch_num += 1
-        pct = done / max(total_pending, 1)
-        lbl = f"{batch[0]}...{batch[-1]}"
-        if progress_cb:
-            progress_cb(pct,
-                f"BSE batch {batch_num - len(nse_batches)}/{len(bse_batches)}: {lbl} | "
-                f"{nse_added} NSE + {bse_added} BSE saved so far")
-        try:
-            stocks, err = _resolve_bse_batch(batch, token)
-            if err and "Auth error" in err:
-                errors.append(err); break
-            if err and err != "empty_data_used_key_only":
-                errors.append(f"BSE {lbl}: {err}")
-            if stocks:
-                db_save_batch(stocks)
-                bse_added += len(stocks)
-        except Exception as e:
-            errors.append(f"BSE {lbl}: {e}")
-        done += len(batch)
-        time.sleep(0.25)
-
-    counts = db_count()
-    final_msg = (
-        f"✅ Done! Added {nse_added} NSE + {bse_added} BSE stocks.  "
-        f"DB total: {counts['total']:,}  "
-        f"({counts['nse']:,} NSE + {counts['bse']:,} BSE)"
-    )
-    if errors:
-        final_msg += f"  |  {len(errors)} batch errors (see log)"
-    if progress_cb:
-        progress_cb(1.0, final_msg)
-
-    return {
-        "ok":         True,
-        "nse_added":  nse_added,
-        "bse_added":  bse_added,
-        "total_in_db":counts["total"],
-        "errors":     errors,
-    }
-
-
-
-def get_fundamentals() -> dict:
-    return json.loads(FUND_DATA_PATH.read_text()) if FUND_DATA_PATH.exists() else {}
-
-# ===========================================================================
-#  EPS INTELLIGENCE ENGINE
-# ===========================================================================
-def eps_qoq(eps: list) -> list:
-    return [(eps[i]-eps[i-1])/eps[i-1]*100 if eps[i-1] > 0 else 0 for i in range(1, len(eps))]
-
-def eps_yoy(eps: list) -> Optional[float]:
-    return (eps[-1]-eps[0])/eps[0]*100 if len(eps) >= 4 and eps[0] > 0 else None
-
-def calc_accel(g: list) -> dict:
-    if len(g) < 2:
-        return {"score": 0, "verdict": "N/A", "ok": False}
-    steps = sum(1 for i in range(1, len(g)) if g[i] > g[i-1])
-    score = round(steps / (len(g)-1) * 100)
-    peak  = g[-1] == max(g)
-    pos   = all(x > 0 for x in g)
-    ok    = score >= 50 and peak and pos
-    if ok and score == 100: v = "🚀 Perfect Staircase — Parabolic Risk!"
-    elif ok:                 v = "📈 Accelerating EPS"
-    elif pos:                v = "✅ Consistent Growth"
-    elif steps > 0:          v = "⚠️ Mixed Acceleration"
-    else:                    v = "❌ Decelerating"
-    return {"score": score, "verdict": v, "ok": ok}
-
-def calc_surprise(actual: float, est: Optional[float]) -> dict:
-    if not est or est <= 0:
-        return {"beat": None, "verdict": "No Estimate", "ok": False}
-    b = (actual - est) / abs(est) * 100
-    v = ("🎯 Massive Beat (>20%)" if b >= 20 else "✅ Strong Beat (>10%)" if b >= 10
-         else "👍 Beat (>3%)" if b >= 3 else "≈ In Line" if b >= -3 else "❌ Miss")
-    return {"beat": round(b, 1), "verdict": v, "ok": b >= 3}
-
-def calc_sq(eps: list, sales: list) -> dict:
-    eg = (eps[-1]-eps[0])/abs(eps[0])*100 if eps[0] else 0
-    sg = (sales[-1]-sales[0])/abs(sales[0])*100 if sales[0] else 0
-    if eg >= 20 and sg >= 15:  g,v,ok = "A+","🏆 Organic Growth — EPS + Sales expanding",True
-    elif eg >= 15 and sg >= 8: g,v,ok = "A","✅ Strong Organic Growth",True
-    elif eg >= 10 and sg >= 5: g,v,ok = "B","👍 Decent Growth Quality",True
-    elif eg >= 10 and sg < 3:  g,v,ok = "C","⚠️ Cost Cutting — Sales flat",False
-    elif eg < 0:               g,v,ok = "D","❌ EPS Declining",False
-    else:                      g,v,ok = "B-","↗ Moderate — monitor revenue",False
-    return {"grade": g, "verdict": v, "ok": ok, "eps_g": round(eg,1), "sal_g": round(sg,1)}
-
-def analyse_fund(sym: str, price: float, fd: dict) -> dict:
-    d = fd.get(sym)
-    if not d:
-        return {"av": False}
-    eps_l, sal_l, est = d["eps"], d["sales"], d.get("est")
-    ttm = sum(eps_l)
-    pe  = round(price/ttm, 1) if ttm > 0 else None
-    g   = eps_qoq(eps_l)
-    yoy = eps_yoy(eps_l)
-    ac  = calc_accel(g)
-    sr  = calc_surprise(eps_l[-1], est)
-    sqr = calc_sq(eps_l, sal_l)
-    fs  = min((35 if yoy and yoy >= 20 else 20 if yoy and yoy >= 10 else 0) +
-              (25 if ac["ok"] else 0) + (20 if sr["ok"] else 0) + (20 if sqr["ok"] else 0), 100)
-    return {"av": True, "eps": eps_l, "sales": sal_l, "ttm": round(ttm,2),
-            "pe": pe, "g": [round(x,1) for x in g],
-            "yoy": round(yoy,1) if yoy is not None else None,
-            "ac": ac, "sr": sr, "sq": sqr, "est": est, "fs": fs}
+        r=requests.get(f"{UPSTOX_BASE}/user/profile",headers=_hdr(token),timeout=8)
+        if r.status_code==200:
+            d=r.json().get("data",{})
+            return {"ok":True,"name":d.get("name",d.get("user_name","User")),
+                    "email":d.get("email","")}
+        return {"ok":False,"error":f"HTTP {r.status_code}: {r.text[:80]}"}
+    except Exception as e: return {"ok":False,"error":str(e)}
 
 # ===========================================================================
 #  TECHNICAL INDICATORS
 # ===========================================================================
-def perf_n(df: pd.DataFrame, n: int) -> Optional[float]:
-    if len(df) < n+1:
-        return None
-    s, e = df["C"].iloc[-(n+1)], df["C"].iloc[-1]
+def perf_n(df,n):
+    if len(df)<n+1: return None
+    s,e=df["C"].iloc[-(n+1)],df["C"].iloc[-1]
     return (e-s)/s*100 if s else None
 
-def sma21(df: pd.DataFrame) -> float:
-    return float(df["C"].tail(21).mean())
+def sma_n(df,n):
+    return float(df["C"].tail(n).mean()) if len(df)>=n else float(df["C"].mean())
 
-def rsi14(df: pd.DataFrame) -> float:
-    if len(df) < 16:
-        return float("nan")
-    cl = df["C"].tail(28).values
-    d  = np.diff(cl)
-    g  = np.where(d > 0, d, 0)
-    ls = np.where(d < 0, -d, 0)
-    ag, al = g[:14].mean(), ls[:14].mean()
-    for i in range(14, len(d)):
-        ag = (ag*13+g[i])/14
-        al = (al*13+ls[i])/14
-    return round(100-100/(1+ag/al), 1) if al else 100.0
+def rsi14(df):
+    if len(df)<16: return float("nan")
+    cl=df["C"].tail(28).values; d=np.diff(cl)
+    g=np.where(d>0,d,0); ls=np.where(d<0,-d,0)
+    ag,al=g[:14].mean(),ls[:14].mean()
+    for i in range(14,len(d)): ag=(ag*13+g[i])/14; al=(al*13+ls[i])/14
+    return round(100-100/(1+ag/al),1) if al else 100.0
 
-def avg_vol(df: pd.DataFrame, n: int = 20) -> float:
-    return float(df["V"].tail(n).mean())
-
-def high52(df: pd.DataFrame) -> float:
-    return float(df["H"].tail(252).max())
+def avg_vol(df,n=20): return float(df["V"].tail(n).mean())
+def high52(df): return float(df["H"].tail(252).max())
+def low52(df):  return float(df["L"].tail(252).min())
+def atr14(df):
+    if len(df)<15: return 0.0
+    h=df["H"].tail(15).values; l=df["L"].tail(15).values; c=df["C"].tail(15).values
+    tr=[max(h[i]-l[i],abs(h[i]-c[i-1]),abs(l[i]-c[i-1])) for i in range(1,15)]
+    return round(sum(tr)/len(tr),2)
 
 # ===========================================================================
-#  SCAN ENGINE  (runs in background thread)
+#  EPS INTELLIGENCE ENGINE  (reworked — 3 clear rules)
 # ===========================================================================
-def run_scan_thread(token: str, cfg: dict, uni: list, fd: dict):
+def eps_qoq(eps):
+    return [(eps[i]-eps[i-1])/abs(eps[i-1])*100 if eps[i-1]!=0 else 0
+            for i in range(1,len(eps))]
+
+def eps_yoy(eps):
+    if len(eps)<4 or eps[0]==0: return None
+    return (eps[-1]-eps[0])/abs(eps[0])*100
+
+def rule_accel(eps):
+    """Rule 1 — EPS Acceleration: each quarter grows faster than the last."""
+    if len(eps)<3:
+        return {"ok":False,"score":0,"grade":"F","verdict":"Insufficient data","qoq":[]}
+    g=eps_qoq(eps)
+    if not g:
+        return {"ok":False,"score":0,"grade":"F","verdict":"No data","qoq":[]}
+    pos   =sum(1 for x in g if x>0)
+    steps =sum(1 for i in range(1,len(g)) if g[i]>g[i-1])
+    latest_best=len(g)>0 and g[-1]==max(g)
+    score =round(steps/max(len(g)-1,1)*100)
+    ok    =(score>=50 and all(x>0 for x in g) and latest_best)
+    if ok and score==100: grd,v="A+","Parabolic staircase"
+    elif ok:              grd,v="A","Accelerating QoQ"
+    elif pos==len(g):     grd,v="B","Consistent positive"
+    elif pos>0:           grd,v="C","Mixed quarters"
+    else:                 grd,v="D","Decelerating"
+    return {"ok":ok,"score":score,"grade":grd,"verdict":v,"qoq":g}
+
+def rule_surprise(latest_eps, est):
+    """Rule 2 — Surprise Factor: actual EPS vs analyst estimate."""
+    if not est or est==0:
+        return {"ok":False,"beat":None,"grade":"N/A","verdict":"No estimate"}
+    beat=(latest_eps-est)/abs(est)*100
+    if   beat>=20: ok,grd,v=True, "A+","Massive beat >20%"
+    elif beat>=10: ok,grd,v=True, "A", "Strong beat >10%"
+    elif beat>= 3: ok,grd,v=True, "B", "Beat >3%"
+    elif beat>=-3: ok,grd,v=False,"C", "In line"
+    else:          ok,grd,v=False,"D", "Miss"
+    return {"ok":ok,"beat":round(beat,1),"grade":grd,"verdict":v}
+
+def rule_sales_quality(eps, sales):
+    """Rule 3 — Sales Quality: organic growth needs both EPS and Revenue rising."""
+    if len(eps)<2 or len(sales)<2 or eps[0]==0 or sales[0]==0:
+        return {"ok":False,"grade":"N/A","verdict":"Insufficient data","eps_g":0,"sal_g":0}
+    eg=(eps[-1]-eps[0])/abs(eps[0])*100
+    sg=(sales[-1]-sales[0])/abs(sales[0])*100
+    if   eg>=25 and sg>=20: ok,grd,v=True, "A+","Organic: EPS+Revenue accelerating"
+    elif eg>=15 and sg>=10: ok,grd,v=True, "A", "Strong organic growth"
+    elif eg>=10 and sg>= 5: ok,grd,v=True, "B", "Decent quality growth"
+    elif eg>=10 and sg<  3: ok,grd,v=False,"C", "Cost-cutting — revenue flat"
+    elif eg<0:              ok,grd,v=False,"D", "EPS declining"
+    else:                   ok,grd,v=False,"B-","Moderate — watch revenue"
+    return {"ok":ok,"grade":grd,"verdict":v,"eps_g":round(eg,1),"sal_g":round(sg,1)}
+
+def analyse_fund(sym, price, fd):
+    d=fd.get(sym)
+    if not d: return {"av":False}
+    eps,sales,est=d["eps"],d.get("sales",[]),d.get("est")
+    if not eps or len(eps)<2: return {"av":False}
+    ttm=sum(eps[-4:]) if len(eps)>=4 else sum(eps)
+    pe=round(price/ttm,1) if ttm>0 else None
+    yoy=eps_yoy(eps)
+    ac=rule_accel(eps); sr=rule_surprise(eps[-1],est)
+    sqr=rule_sales_quality(eps,sales)
+    fs=0
+    if yoy is not None:
+        fs+=30 if yoy>=30 else 22 if yoy>=20 else 12 if yoy>=10 else 0
+    if ac["ok"]:  fs+=25
+    elif ac["grade"] in ("B","C"): fs+=8
+    if sr["ok"]:  fs+=20
+    if sqr["ok"]: fs+=25
+    elif sqr["grade"]=="B": fs+=10
+    return {"av":True,"eps":eps,"sales":sales,"ttm":round(ttm,2),"pe":pe,
+            "yoy":round(yoy,1) if yoy is not None else None,
+            "g":ac["qoq"],"ac":ac,"sr":sr,"sq":sqr,"est":est,"fs":min(fs,100)}
+
+# ===========================================================================
+#  SCAN ENGINE  (background thread — only writes to _SCAN)
+# ===========================================================================
+def run_scan_thread(token, cfg, uni, fd):
     """
-    Runs in a daemon thread.
-    Writes ONLY to the module-level _SCAN dict (thread-safe).
-    Never touches st.session_state — that is NOT thread-safe in Streamlit.
+    4-filter scan pipeline:
+    F1: Within X% of 52-Week High
+    F2: RS Resilience (sector drops, stock holds)
+    F3: 21MA Buy Zone (price within 0-N% above 21-day SMA)
+    F4: EPS Intelligence (3 rules: Accel / Surprise / Sales Quality)
+
+    ALL stocks that PASS the selected filters are returned.
+    Stocks are sorted: perfect (all 4) first, then by fundamental score.
     """
-    import traceback
     try:
-        total = len(uni)
-        _scan_update(running=True, done=False, error="", progress=0.0,
-                     results=[], log=[],
-                     stats={"total": total, "processed": 0, "passed": 0, "perfect": 0})
-        _scan_log(f"Scan started: {total} stocks")
+        total=len(uni)
+        stats={"total":total,"processed":0,"passed":0,"perfect":0}
+        _su(running=True,done=False,error="",progress=0.0,results=[],log=[],stats=dict(stats))
+        _sl(f"Scan: {total} stocks")
 
-        results = []
-        stats   = {"total": total, "processed": 0, "passed": 0, "perfect": 0}
+        results=[]
 
         # Phase 1: Batch LTP
-        _scan_update(msg="Phase 1/3: Fetching live prices (batch)…")
-        _scan_log("Phase 1: batch LTP fetch")
+        _su(msg="[1/3] Batch LTP fetch...")
         try:
-            ltp_map = fetch_batch_ltp([u["ikey"] for u in uni], token)
-            _scan_log(f"Phase 1 done: {len(ltp_map)} LTPs fetched")
+            ltp_map=fetch_ltp_batch([u["ikey"] for u in uni],token)
+            _sl(f"LTP: {len(ltp_map)}/{total}")
         except Exception as e:
-            _scan_log(f"Phase 1 warning (LTP batch): {e} — will use last-close prices")
-            ltp_map = {}
+            _sl(f"LTP error: {e}"); ltp_map={}
 
-        # Phase 2: Sector indices
-        _scan_update(msg="Phase 2/3: Caching sector index candles…")
-        _scan_log("Phase 2: sector index candles")
-        sec_keys  = list({u["sector"] for u in uni})
-        sec_cache = {}
+        # Phase 2: Sector index candles
+        _su(msg="[2/3] Caching sector indices...")
+        sec_keys=list({u["sector"] for u in uni if u.get("sector")})
+        sec_cache={}
         for sk in sec_keys:
-            try:
-                sec_cache[sk] = fetch_hist(sk, token)
-            except Exception as e:
-                _scan_log(f"  sector {sk}: {e}")
-                sec_cache[sk] = None
-            time.sleep(0.1)
-        valid_sectors = sum(1 for v in sec_cache.values() if v is not None)
-        _scan_log(f"Phase 2 done: {valid_sectors}/{len(sec_keys)} sector indices OK")
+            try: sec_cache[sk]=fetch_hist(sk,token)
+            except: sec_cache[sk]=None
+            time.sleep(0.08)
+        _sl(f"Sectors: {sum(1 for v in sec_cache.values() if v is not None)}/{len(sec_keys)} OK")
 
-        # Phase 3: Per-stock scan
-        _scan_log("Phase 3: per-stock scan starting")
-        for i, stk in enumerate(uni):
-            # Check stop flag
-            with _SCAN_LOCK:
-                if not _SCAN["running"]:
-                    _scan_log("Scan stopped by user")
-                    break
+        # Phase 3: Per-stock
+        for i,stk in enumerate(uni):
+            with _LOCK:
+                if not _SCAN["running"]: _sl("Stopped"); break
 
-            sym  = stk["sym"]
-            ikey = stk["ikey"]
-            skey = stk["sector"]
-
-            stats["processed"] = i + 1
-            pct = (i + 1) / total
-            _scan_update(
-                progress=pct,
-                stats=dict(stats),
-                msg=f"Phase 3/3: [{i+1}/{total}]  {sym}  — "
-                    f"{stats['passed']} passed  {stats['perfect']} perfect"
-            )
+            sym=stk["sym"]; ikey=stk["ikey"]; skey=stk.get("sector","")
+            stats["processed"]=i+1
+            _su(progress=(i+1)/total, stats=dict(stats),
+                msg=f"[3/3] {i+1}/{total} {sym} | passed:{stats['passed']} perfect:{stats['perfect']}")
 
             try:
-                df = fetch_hist(ikey, token)
-            except Exception as e:
-                _scan_log(f"  {sym}: hist fetch error: {e}")
-                continue
+                df=fetch_hist(ikey,token)
+                if df is None or len(df)<30: continue
 
-            if df is None or len(df) < 30:
-                continue
+                price=ltp_map.get(ikey) or float(df["C"].iloc[-1])
+                if avg_vol(df)<cfg["min_vol"]: continue
 
-            try:
-                price = ltp_map.get(ikey) or float(df["C"].iloc[-1])
-                if avg_vol(df) < cfg["min_vol"]:
-                    continue
+                # F1: 52-Week High proximity
+                h52_=high52(df); l52_=low52(df)
+                dH=(price-h52_)/h52_*100
+                if dH < -cfg["high_prox"]: continue
 
-                h52_ = high52(df)
-                dH   = (price - h52_) / h52_ * 100
-                if dH < -cfg["high_prox"]:
-                    continue
+                # F2: RS Resilience
+                sd=sec_cache.get(skey)
+                rs_leader=False; sp=None; xp=None
+                if sd is not None and len(sd)>=cfg["rs_days"]+2:
+                    sp=perf_n(df,cfg["rs_days"]); xp=perf_n(sd,cfg["rs_days"])
+                    if sp is not None and xp is not None:
+                        rs_leader=(xp<=cfg["sec_drop"] and sp>=cfg.get("stk_min",0.0))
+                if cfg.get("req_rs") and not rs_leader: continue
 
-                sd = sec_cache.get(skey)
-                if sd is None or len(sd) < cfg["rs_days"] + 2:
-                    continue
+                # F3: 21MA Buy Zone
+                sma21=sma_n(df,21); sma50=sma_n(df,50)
+                dS=(price-sma21)/sma21*100
+                in_bz=cfg["bz_lo"]<=dS<=cfg["bz_hi"]
+                if cfg.get("req_bz") and not in_bz: continue
 
-                sp = perf_n(df, cfg["rs_days"])
-                xp = perf_n(sd, cfg["rs_days"])
-                if sp is None or xp is None:
-                    continue
+                # Indicators
+                rsi_v=rsi14(df); atr_v=atr14(df); av=avg_vol(df)
 
-                rs_leader = xp < cfg["sec_drop"] and sp >= cfg.get("stk_min", 0)
-                sm        = sma21(df)
-                dS        = (price - sm) / sm * 100
-                in_bz     = cfg["bz_lo"] <= dS <= cfg["bz_hi"]
-                rsi_v     = rsi14(df)
+                # F4: EPS Intelligence
+                fund=analyse_fund(sym,price,fd)
+                ttm=fund.get("ttm") or 0; pe=fund.get("pe")
+                yoy=fund.get("yoy"); fs=fund.get("fs",0)
+                ac_ok=fund.get("ac",{}).get("ok",False) if fund["av"] else False
+                sr_ok=fund.get("sr",{}).get("ok",False) if fund["av"] else False
+                sq_ok=fund.get("sq",{}).get("ok",False) if fund["av"] else False
+                eps_ok=ttm>=cfg["min_eps"]; yoy_ok=(yoy is not None and yoy>=cfg["min_yoy"])
 
-                fund  = analyse_fund(sym, price, fd)
-                ttm   = fund.get("ttm") or 0
-                pe    = fund.get("pe")
-                yoy   = fund.get("yoy")
-                fs    = fund.get("fs", 0)
-                ac_ok = fund.get("ac", {}).get("ok", False) if fund["av"] else False
-                sr_ok = fund.get("sr", {}).get("ok", False) if fund["av"] else False
-                sq_ok = fund.get("sq", {}).get("ok", False) if fund["av"] else False
+                if cfg.get("req_eps") and not eps_ok: continue
+                if cfg.get("req_yoy") and not yoy_ok: continue
+                if cfg.get("req_accel") and not ac_ok: continue
+                if cfg.get("req_surp")  and not sr_ok: continue
+                if cfg.get("req_qual")  and not sq_ok: continue
 
-                is_perfect = (rs_leader and in_bz
-                              and ttm >= cfg["min_eps"]
-                              and yoy is not None and yoy >= cfg["min_yoy"]
-                              and ac_ok)
+                # Perfect = all 4 filters satisfied simultaneously
+                is_perfect=(rs_leader and in_bz and eps_ok and yoy_ok and ac_ok)
 
-                stats["passed"]  += 1
-                stats["perfect"] += int(is_perfect)
-
+                stats["passed"]+=1; stats["perfect"]+=int(is_perfect)
                 results.append({
-                    "name":     stk["name"],    "sym":    sym,
-                    "sector":   skey.replace("NSE_INDEX|Nifty ","").replace("BSE_INDEX|S&P BSE ",""),
-                    "exch":     stk["exch"],    "price":  round(price, 2),
-                    "high":     round(h52_, 2), "dH":     round(dH, 2),
-                    "sp":       round(sp, 2),   "xp":     round(xp, 2),
-                    "rs_leader":rs_leader,      "sma":    round(sm, 2),
-                    "dS":       round(dS, 2),   "in_bz":  in_bz,
-                    "rsi":      None if math.isnan(rsi_v) else rsi_v,
-                    "eps":      fund.get("eps",[]),   "sales": fund.get("sales",[]),
-                    "ttm":      fund.get("ttm"),       "pe":   pe,
-                    "yoy":      yoy,                   "g":    fund.get("g",[]),
-                    "ac":       fund.get("ac",{}),     "sr":   fund.get("sr",{}),
-                    "sq":       fund.get("sq",{}),
-                    "eps_ok":   ttm >= cfg["min_eps"],
-                    "yoy_ok":   bool(yoy and yoy >= cfg["min_yoy"]),
-                    "ac_ok":    ac_ok, "sr_ok": sr_ok, "sq_ok": sq_ok,
-                    "fs":       fs,    "perfect": is_perfect,
+                    "name":stk["name"],"sym":sym,"ikey":ikey,
+                    "sector":skey.replace("NSE_INDEX|Nifty ","").replace("BSE_INDEX|S&P BSE ",""),
+                    "exch":stk["exch"],"price":round(price,2),
+                    "high52":round(h52_,2),"low52":round(l52_,2),"dH":round(dH,2),
+                    "sp":round(sp,2) if sp is not None else None,
+                    "xp":round(xp,2) if xp is not None else None,
+                    "rs_leader":rs_leader,"sma21":round(sma21,2),"sma50":round(sma50,2),
+                    "dS":round(dS,2),"in_bz":in_bz,
+                    "rsi":None if math.isnan(rsi_v) else rsi_v,
+                    "atr":atr_v,"avg_vol":int(av),
+                    "eps":fund.get("eps",[]),"sales":fund.get("sales",[]),
+                    "ttm":fund.get("ttm"),"pe":pe,"yoy":yoy,"g":fund.get("g",[]),
+                    "ac":fund.get("ac",{}),"sr":fund.get("sr",{}),"sq":fund.get("sq",{}),
+                    "eps_ok":eps_ok,"yoy_ok":yoy_ok,
+                    "ac_ok":ac_ok,"sr_ok":sr_ok,"sq_ok":sq_ok,
+                    "fs":fs,"perfect":is_perfect,
+                    "live_ltp":price,"live_chg":0.0,"live_pct":0.0,
                 })
             except Exception as e:
-                _scan_log(f"  {sym}: processing error: {e}")
-                continue
+                _sl(f"  {sym}: {e}"); continue
 
-            time.sleep(0.05)
+            time.sleep(0.04)
 
-        # Sort and finalise
-        sorted_results = sorted(results, key=lambda x: x.get("fs", 0), reverse=True)
-        done_msg = (f"✅ Scan complete — {stats['passed']} passed / {total} total "
-                    f"({stats['perfect']} perfect)")
-        _scan_update(
-            running=False, done=True, progress=1.0,
-            results=sorted_results, stats=dict(stats), msg=done_msg
-        )
-        _scan_log(done_msg)
+        sorted_r=sorted(results,key=lambda x:(not x["perfect"],-x.get("fs",0)))
+        msg=f"Done: {stats['passed']} passed / {total} | {stats['perfect']} perfect setups"
+        _su(running=False,done=True,progress=1.0,results=sorted_r,stats=dict(stats),msg=msg)
+        _sl(msg)
 
     except Exception as e:
-        err = f"Scan crashed: {e}\n{traceback.format_exc()}"
-        _scan_update(running=False, done=True, error=err, msg=f"❌ {e}")
-        _scan_log(err)
-
+        err=f"Crash: {e}\n{traceback.format_exc()}"
+        _su(running=False,done=True,error=err,msg=f"CRASH: {e}"); _sl(err)
 
 # ===========================================================================
-#  TOKEN VERIFICATION
+#  FUNDAMENTALS
 # ===========================================================================
-def verify_token(token: str) -> dict:
-    """
-    Hit Upstox /v2/user/profile to confirm token is valid.
-    Returns {ok, name, email, error}
-    """
-    try:
-        r = requests.get(
-            f"{UPSTOX_BASE}/user/profile",
-            headers=upstox_hdr(token),
-            timeout=8,
-        )
-        if r.status_code == 200:
-            d = r.json().get("data", {})
-            return {
-                "ok":    True,
-                "name":  d.get("name", d.get("user_name", "User")),
-                "email": d.get("email", ""),
-                "error": "",
-            }
-        else:
-            return {"ok": False, "name": "", "email": "",
-                    "error": f"HTTP {r.status_code}: {r.text[:120]}"}
-    except Exception as e:
-        return {"ok": False, "name": "", "email": "", "error": str(e)}
+@st.cache_data(ttl=300,show_spinner=False)
+def get_fundamentals():
+    return json.loads(FUND_PATH.read_text()) if FUND_PATH.exists() else {}
 
+@st.cache_data(ttl=120,show_spinner=False)
+def load_universe():
+    return db_load_equity()
 
 # ===========================================================================
-#  CHART HELPERS  (Plotly dark theme)
+#  CHART HELPERS
 # ===========================================================================
-BG   = "#0f1117"
-PBG  = "#13161f"
-GRID = "rgba(37,42,58,.7)"
-MUT  = "#454d63"
-SKY  = "rgba(91,196,245,.8)"
-SAGE = "rgba(78,207,143,.8)"
-AMB  = "rgba(240,180,41,.8)"
-CORAL= "rgba(240,112,112,.8)"
+_PBG="#0f1320";_BG="#0a0d14";_GR="rgba(30,39,64,.6)"
+_SKY="rgba(56,189,248,.8)";_SAGE="rgba(52,211,153,.8)"
+_AMB="rgba(251,191,36,.8)";_COR="rgba(248,113,113,.8)";_MU="#2e3a52"
+QL=["Q1","Q2","Q3","Q4 Latest"]
 
-def base_layout(title: str = "", h: int = 340) -> dict:
-    return dict(
-        title=dict(text=title, font=dict(color="#b4bdce", size=13, family="JetBrains Mono")),
-        paper_bgcolor=PBG, plot_bgcolor=BG,
-        font=dict(color="#737e96", family="JetBrains Mono"),
-        height=h, margin=dict(l=44, r=16, t=50, b=40),
-        xaxis=dict(gridcolor=GRID, tickcolor=MUT, linecolor=GRID, tickfont=dict(size=10)),
-        yaxis=dict(gridcolor=GRID, tickcolor=MUT, linecolor=GRID, tickfont=dict(size=10)),
-    )
+def _lay(title="",h=320):
+    return dict(title=dict(text=title,font=dict(color="#a8b4cc",size=12,family="JetBrains Mono")),
+                paper_bgcolor=_PBG,plot_bgcolor=_BG,
+                font=dict(color="#5c6a88",family="JetBrains Mono"),
+                height=h,margin=dict(l=40,r=12,t=44,b=36),
+                xaxis=dict(gridcolor=_GR,linecolor=_GR,tickfont=dict(size=9)),
+                yaxis=dict(gridcolor=_GR,linecolor=_GR,tickfont=dict(size=9)))
 
-def pt(r: dict) -> str:
-    return AMB if r.get("perfect") else SAGE if r.get("rs_leader") else MUT
-
-def chart_rs_scatter(df: list, rs_days: int) -> go.Figure:
-    fig = go.Figure()
-    fig.add_vline(x=0, line=dict(color=GRID, dash="dot", width=1))
-    fig.add_hline(y=-3, line=dict(color=CORAL, dash="dot", width=1))
-    fig.add_shape(type="rect", x0=0, x1=max((r.get("sp",0) for r in df), default=10)+5,
-                  y0=-50, y1=-3, fillcolor="rgba(78,207,143,.03)", line_width=0)
-    fig.add_trace(go.Scatter(
-        x=[r.get("sp",0) for r in df], y=[r.get("xp",0) for r in df],
-        mode="markers+text",
-        marker=dict(size=[9 if r.get("perfect") else 7 if r.get("rs_leader") else 5 for r in df],
-                    color=[pt(r) for r in df],
-                    symbol=["star" if r.get("perfect") else "diamond" if r.get("rs_leader") else "circle" for r in df],
-                    line=dict(color="rgba(0,0,0,.4)", width=.5)),
-        text=[r.get("sym","") for r in df],
-        textposition="top center",
-        textfont=dict(size=8, color="#737e96"),
-        hovertemplate="<b>%{text}</b><br>Stock: %{x:.1f}%<br>Sector: %{y:.1f}%<extra></extra>",
-    ))
-    lay = base_layout(f"RS Map — Stock vs Sector ({rs_days}d)", h=380)
-    lay["xaxis"]["title"] = dict(text=f"Stock {rs_days}d %", font=dict(size=11))
-    lay["yaxis"]["title"] = dict(text=f"Sector {rs_days}d %", font=dict(size=11))
-    fig.update_layout(**lay)
-    return fig
-
-def chart_fund_bar(df: list) -> go.Figure:
-    top = sorted(df, key=lambda x: x.get("fs",0))[-20:]
-    colors = [AMB if r.get("perfect") else SAGE if (r.get("fs",0) >= 60) else SKY for r in top]
-    fig = go.Figure(go.Bar(
-        y=[f"{r['sym']}[{(r.get('exch','?') or '?')[0]}]" for r in top],
-        x=[r.get("fs",0) for r in top],
-        orientation="h",
-        marker_color=colors, marker_line_color="transparent",
-        customdata=[[r.get("sym",""), r.get("name",""), r.get("fs",0)] for r in top],
-        hovertemplate="<b>%{customdata[0]}</b><br>Fund Score: %{x}/100<extra></extra>",
-    ))
-    fig.add_vline(x=60, line=dict(color=SAGE, dash="dot", width=1))
-    lay = base_layout("Fundamental Quality Score (Top 20)", h=380)
-    lay["xaxis"]["range"] = [0, 112]
-    fig.update_layout(**lay)
-    return fig
-
-def chart_pe_scatter(df: list) -> go.Figure:
-    valid = [r for r in df if r.get("pe") and r.get("yoy") is not None]
-    fig   = go.Figure(go.Scatter(
-        x=[r.get("yoy",0) for r in valid], y=[r.get("pe",0) for r in valid],
-        mode="markers+text",
-        marker=dict(size=[9 if r.get("perfect") else 6 for r in valid],
-                    color=[pt(r) for r in valid],
-                    line=dict(color="rgba(0,0,0,.4)", width=.5)),
-        text=[r.get("sym","") for r in valid],
-        textposition="top center", textfont=dict(size=8, color="#737e96"),
-        hovertemplate="<b>%{text}</b><br>YoY: %{x:.1f}%<br>P/E: %{y:.1f}x<extra></extra>",
-    ))
-    lay = base_layout("P/E vs YoY EPS Growth", h=340)
-    lay["xaxis"]["title"] = dict(text="YoY EPS Growth %", font=dict(size=11))
-    lay["yaxis"]["title"] = dict(text="P/E Ratio", font=dict(size=11))
-    fig.update_layout(**lay)
-    return fig
-
-def chart_52w_bar(df: list) -> go.Figure:
-    s = sorted(df, key=lambda x: x.get("dH",0), reverse=True)
-    colors = [AMB if r.get("perfect") else SAGE if (r.get("dH",0) >= -1) else SKY for r in s]
-    fig = go.Figure(go.Bar(
-        x=[r.get("sym","") for r in s], y=[r.get("dH",0) for r in s],
-        marker_color=colors, marker_line_color="transparent",
-        hovertemplate="<b>%{x}</b><br>Dist 52W High: %{y:.2f}%<extra></extra>",
-    ))
-    fig.add_hline(y=-2, line=dict(color=CORAL, dash="dash", width=1))
-    lay = base_layout("Distance from 52-Week High (%)", h=340)
-    lay["xaxis"]["tickfont"] = {"size": 8}
-    lay["xaxis"]["tickangle"] = 45
-    lay["yaxis"]["range"] = [min((r.get("dH",0) for r in s), default=-5)-1, 3]
-    fig.update_layout(**lay)
-    return fig
-
-def chart_eps_staircase(r: dict) -> go.Figure:
-    eps   = r.get("eps", [])
-    sales = r.get("sales", [])
-    qoq   = r.get("g", [])
-    if not eps:
-        return go.Figure()
-
-    fig = make_subplots(rows=1, cols=2, subplot_titles=["EPS Staircase (₹/share)", "Sales (₹ Cr)"],
-                        horizontal_spacing=0.12)
-    colors = [SAGE if i == len(eps)-1 else SKY for i in range(len(eps))]
-    fig.add_trace(go.Bar(
-        x=QL[:len(eps)], y=eps, marker_color=colors, marker_line_color="transparent",
-        text=[f"₹{e:.1f}" for e in eps], textposition="outside", textfont=dict(size=10, color="#b4bdce"),
-        name="EPS",
-    ), row=1, col=1)
-    for i, g in enumerate(qoq):
-        color = SAGE if g > 0 else CORAL
-        arrow = "↑" if g > 0 else "↓"
-        fig.add_annotation(
-            x=QL[i+1] if i+1 < len(QL) else QL[-1], y=eps[i+1] if i+1 < len(eps) else 0,
-            text=f"{arrow}{abs(g):.0f}%", showarrow=False, yshift=22,
-            font=dict(size=9, color=color, family="JetBrains Mono"), row=1, col=1,
-        )
+def chart_eps(r):
+    eps=r.get("eps",[]); sales=r.get("sales",[]); g=r.get("g",[])
+    if not eps: return go.Figure()
+    ql=QL[:len(eps)]
+    fig=make_subplots(rows=1,cols=2,subplot_titles=["EPS (Rs/share)","Revenue (Rs Cr)"],
+                      horizontal_spacing=0.12)
+    clr=[_SAGE if i==len(eps)-1 else _SKY for i in range(len(eps))]
+    fig.add_trace(go.Bar(x=ql,y=eps,marker_color=clr,marker_line_color="transparent",
+        text=[f"Rs{e:.1f}" for e in eps],textposition="outside",
+        textfont=dict(size=9,color="#a8b4cc"),name="EPS"),row=1,col=1)
     if sales:
-        s_clr = [f"rgba(240,180,41,{0.4+0.15*i})" for i in range(len(sales))]
-        fig.add_trace(go.Bar(
-            x=QL[:len(sales)], y=sales, marker_color=s_clr, marker_line_color="transparent",
-            text=[f"₹{v/1000:.0f}K" if v > 10000 else f"₹{v:.0f}" for v in sales],
-            textposition="outside", textfont=dict(size=9, color="#b4bdce"),
-            name="Sales",
-        ), row=1, col=2)
+        sc=[f"rgba(251,191,36,{0.4+0.15*i})" for i in range(len(sales))]
+        fig.add_trace(go.Bar(x=ql[:len(sales)],y=sales,marker_color=sc,
+            marker_line_color="transparent",
+            text=[f"{v/1000:.0f}K" if v>10000 else str(int(v)) for v in sales],
+            textposition="outside",textfont=dict(size=9,color="#a8b4cc"),name="Sales"),row=1,col=2)
+    lay=_lay(f"{r.get('name',r.get('sym',''))} - EPS & Revenue",h=260)
+    lay["showlegend"]=False
+    for ax in ["xaxis","xaxis2","yaxis","yaxis2"]:
+        lay[ax]=dict(gridcolor=_GR,linecolor=_GR,tickfont=dict(size=9))
+    fig.update_layout(**lay); return fig
 
-    lay = base_layout(f"{r.get('name',r.get('sym',''))} — EPS & Sales Trend", h=280)
-    lay["showlegend"] = False
-    for i in [1, 2]:
-        lay[f"xaxis{'2' if i==2 else ''}"] = dict(gridcolor=GRID, linecolor=GRID, tickfont=dict(size=9))
-        lay[f"yaxis{'2' if i==2 else ''}"] = dict(gridcolor=GRID, linecolor=GRID, tickfont=dict(size=9))
-    fig.update_layout(**lay)
-    return fig
+def chart_rs(results,rs_days):
+    if not results: return go.Figure()
+    fig=go.Figure()
+    fig.add_vline(x=0,line=dict(color=_GR,dash="dot",width=1))
+    fig.add_hline(y=-3,line=dict(color=_COR,dash="dot",width=1))
+    clrs=[_AMB if r.get("perfect") else _SAGE if r.get("rs_leader") else _MU for r in results]
+    sizes=[10 if r.get("perfect") else 8 if r.get("rs_leader") else 5 for r in results]
+    fig.add_trace(go.Scatter(
+        x=[r.get("sp") or 0 for r in results],
+        y=[r.get("xp") or 0 for r in results],
+        mode="markers+text",
+        marker=dict(size=sizes,color=clrs,line=dict(color="rgba(0,0,0,.4)",width=.5)),
+        text=[r.get("sym","") for r in results],
+        textposition="top center",textfont=dict(size=8,color="#5c6a88"),
+        hovertemplate="<b>%{text}</b><br>Stock: %{x:.1f}%<br>Sector: %{y:.1f}%<extra></extra>"))
+    lay=_lay(f"RS Map - Stock vs Sector ({rs_days}d)",h=380)
+    lay["xaxis"]["title"]=dict(text=f"Stock {rs_days}d %",font=dict(size=10))
+    lay["yaxis"]["title"]=dict(text=f"Sector {rs_days}d %",font=dict(size=10))
+    fig.update_layout(**lay); return fig
 
 # ===========================================================================
-#  HTML COMPONENT HELPERS
+#  HTML CARD COMPONENTS
 # ===========================================================================
-def badge(label: str, cls: str) -> str:
-    return f'<span class="badge {cls}">{label}</span> '
+def sig_badges(r):
+    exch=r.get("exch","NSE")
+    ec="var(--sky)" if exch=="NSE" else "var(--amber)"
+    out=f'<span class="sig" style="color:{ec};border:1px solid {ec}33;font-size:.52rem">{exch}</span>'
+    if r.get("rs_leader"): out+='<span class="sig sig-rs">RS LEADER</span>'
+    if r.get("in_bz"):     out+='<span class="sig sig-bz">BUY ZONE</span>'
+    if r.get("ac_ok"):     out+='<span class="sig sig-ac">EPS ACCEL</span>'
+    if r.get("sr_ok"):     out+='<span class="sig sig-sr">BEAT EST</span>'
+    if r.get("sq_ok"):     out+='<span class="sig sig-ok">SALES+EPS</span>'
+    if r.get("perfect"):   out+='<span class="sig sig-ok" style="font-weight:700">PERFECT</span>'
+    return out
 
-def badge_row(r: dict) -> str:
-    html  = badge(r.get("exch","NSE"), f"b-{'nse' if r.get('exch','NSE')=='NSE' else 'bse'}")
-    if r.get("rs_leader"): html += badge("RS LEADER", "b-rs")
-    if r.get("in_bz"):     html += badge("BUY ZONE",  "b-bz")
-    if r.get("ac_ok"):     html += badge("EPS ACCEL", "b-acc")
-    if r.get("sr_ok"):     html += badge("BEAT EST",  "b-srp")
-    if r.get("sq_ok"):     html += badge("SALES+EPS", "b-sal")
-    if r.get("perfect"):   html += badge("⭐ PERFECT", "b-star")
-    return html
-
-def staircase_html(r: dict) -> str:
-    eps = r.get("eps", [])
-    qoq = r.get("g", [])
-    if not eps:
-        return ""
-    max_e = max(eps) if max(eps) > 0 else 1
-    bars  = ""
-    for i, e in enumerate(eps):
-        pct   = max(int(e / max_e * 100), 8)
-        isL   = i == len(eps) - 1
-        col   = "#4ecf8f" if isL else "#5bc4f5"
-        arrow = ""
-        if i > 0 and i-1 < len(qoq):
-            g = qoq[i-1]
-            arrow = f'<span style="color:{"#4ecf8f" if g>0 else "#f07070"}">{"▲" if g>0 else "▼"}{abs(g):.0f}%</span>'
-        label = QL[i] if i < len(QL) else f"Q{i+1}"
-        bars += f"""<div class="scol">
-          <div class="sarr">{arrow}</div>
-          <div class="sbar" style="height:{pct}%;background:{col}">₹{e:.1f}</div>
-          <div class="slb">{label}</div>
-        </div>"""
+def staircase_html(r):
+    eps=r.get("eps",[]); g=r.get("g",[])
+    if not eps: return ""
+    maxe=max(eps) if max(eps)>0 else 1
+    bars=""
+    for i,e in enumerate(eps):
+        pct=max(int(e/maxe*100),6)
+        col="#34d399" if i==len(eps)-1 else "#38bdf8"
+        arr=""
+        if i>0 and i-1<len(g):
+            gv=g[i-1]
+            arr=f'<span style="color:{"#34d399" if gv>0 else "#f87171"}">{gv:+.0f}%</span>'
+        lbl=QL[i] if i<len(QL) else f"Q{i+1}"
+        bars+=(f'<div class="scol">'
+               f'<div class="sarr">{arr}</div>'
+               f'<div class="sbar" style="height:{pct}%;background:{col}">Rs{e:.1f}</div>'
+               f'<div class="slb">{lbl}</div></div>')
     return f'<div class="stair">{bars}</div>'
 
-def met(label: str, value: str, color: str = "var(--t1)") -> str:
-    return (f'<div class="met"><div class="ml">{label}</div>'
-            f'<div class="mv" style="color:{color}">{value}</div></div>')
-
-def kpi(value, label: str, color: str = "c-sky") -> str:
-    return (f'<div class="kpi"><div class="v {color}">{value}</div>'
-            f'<div class="l">{label}</div></div>')
-
-def intel_panel(icon: str, label: str, color: str, verdict: str, sub: str) -> str:
-    return (f'<div class="ip"><div class="il" style="color:{color}">{icon} {label}</div>'
-            f'<div class="iv">{verdict}</div><div class="is">{sub}</div></div>')
-
-def color_val(v: float, pos: str = "var(--sage)", neg: str = "var(--coral)") -> str:
-    return pos if v >= 0 else neg
-
-def fmt_pct(v: Optional[float], sign: bool = True) -> str:
-    if v is None:
-        return "—"
-    return f"{'+' if sign and v > 0 else ''}{v:.2f}%"
-
-# ===========================================================================
-#  RENDER STOCK CARD
-# ===========================================================================
-def render_stock_card(r: dict, rs_days: int, expanded: bool = True):
-    is_perfect = r.get("perfect", False)
-    card_class = "scard perfect" if is_perfect else "scard"
-
-    ac  = r.get("ac", {})
-    sr  = r.get("sr", {})
-    sqr = r.get("sq", {})
-    yoy = r.get("yoy")
-    rsi = r.get("rsi")
-    ttm = r.get("ttm")
-    pe  = r.get("pe")
-    dH  = r.get("dH", 0)
-    dS  = r.get("dS", 0)
-    sp  = r.get("sp", 0)
-    xp  = r.get("xp", 0)
-    fs  = r.get("fs", 0)
-
-    beat_str = f"+{sr.get('beat')}% vs estimate" if sr.get("beat") is not None else "No estimate"
-    qoq_str  = " → ".join([
-        f'<span style="color:{"#4ecf8f" if g>0 else "#f07070"}">{"↑" if g>0 else "↓"}{abs(g):.0f}%</span>'
-        for g in r.get("g", [])
-    ])
-
-    star_html = '<div class="star-tag">⭐ PERFECT SETUP — All Signals Green</div>' if is_perfect else ""
-
-    metrics_html = f"""
-    <div class="mgrid">
-      {met("52W High",     f"₹{r.get('high',0):,.0f}")}
-      {met("Dist 52W%",    fmt_pct(dH),                color_val(dH+2))}
-      {met(f"Stock {rs_days}d%", fmt_pct(sp),          color_val(sp))}
-      {met(f"Sector {rs_days}d%", fmt_pct(xp),         color_val(xp))}
-      {met("21MA Dist%",   fmt_pct(dS),                "var(--tang)")}
-      {met("RSI (14)",     str(rsi) if rsi else "—",   "var(--coral)" if rsi and rsi>70 else "var(--sage)" if rsi and rsi<30 else "var(--t1)")}
-      {met("EPS TTM ₹",   f"₹{ttm}" if ttm else "—",  "var(--amber)")}
-      {met("P/E Ratio",    f"{pe}x" if pe else "—")}
-      {met("YoY EPS%",     fmt_pct(yoy),               "var(--sage)" if yoy and yoy>=20 else "var(--amber)" if yoy and yoy>=10 else "var(--coral)")}
-      {met("Fund Score",   f"{fs}/100",                 "var(--sage)" if fs>=60 else "var(--amber)" if fs>=40 else "var(--t2)")}
-    </div>"""
-
-    intel_html = f"""
-    <div class="igrid">
-      {intel_panel("📈", "EPS Acceleration", "var(--amber)",
-                   ac.get("verdict","—"),
-                   f"Score: {ac.get('score',0)}/100" + (f" · QoQ: {qoq_str}" if qoq_str else ""))}
-      {intel_panel("🎯", "Surprise Factor", "var(--lav)",
-                   sr.get("verdict","—"), beat_str)}
-      {intel_panel("🏆", "Sales vs EPS Quality", "var(--sage)",
-                   sqr.get("verdict","—"),
-                   f"Grade: {sqr.get('grade','—')} · EPS +{sqr.get('eps_g',0)}% · Sales +{sqr.get('sal_g',0)}%")}
-    </div>"""
-
-    full_html = f"""
-    <div class="{card_class}">
-      {star_html}
-      <div class="card-header">
-        <div class="sym">{r.get('sym','')}</div>
-        <div class="nm">{r.get('name','')}</div>
-        <div class="sect">{r.get('sector','').replace('NSE_INDEX|Nifty ','').replace('BSE_INDEX|S&P BSE ','')}</div>
-        <div class="px-val">₹{r.get('price',0):,.2f}</div>
-      </div>
-      <div class="badges">{badge_row(r)}</div>
-      {metrics_html}
-      {staircase_html(r)}
-      {intel_html}
-    </div>"""
-
-    st.markdown(full_html, unsafe_allow_html=True)
-
-    # Plotly EPS chart inside expander
-    if r.get("eps") and expanded:
-        fig = chart_eps_staircase(r)
-        if fig.data:
-            st.plotly_chart(fig, use_container_width=True, key=f"eps_{r['sym']}_{r.get('exch','')}")
+def render_card(r, live, rs_days):
+    li=live.get(r.get("ikey",""),{})
+    ltp=li.get("ltp") or r.get("price",0)
+    chg=li.get("chg",0); pct=li.get("pct",0)
+    chg_col="var(--sage)" if chg>=0 else "var(--coral)"
+    sign="+" if chg>=0 else ""
+    ac=r.get("ac",{}); sr=r.get("sr",{}); sqr=r.get("sq",{})
+    yoy=r.get("yoy"); pe=r.get("pe"); fs=r.get("fs",0)
+    fc="var(--sage)" if fs>=60 else "var(--amber)" if fs>=40 else "var(--coral)"
+    qoq_str=" -> ".join([
+        f'<span style="color:{"#34d399" if x>0 else "#f87171"}">{x:+.0f}%</span>'
+        for x in r.get("g",[])])
+    cls="scard hit" if r.get("perfect") else "scard"
+    st.markdown(f"""
+<div class="{cls}">
+  <div class="ch">
+    <div class="sym">{r.get('sym','')}</div>
+    <div class="nm">{r.get('name','')}</div>
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:4px;
+                padding:2px 7px;font-family:var(--mono);font-size:.55rem;color:var(--t3)">
+      {r.get('sector','')}</div>
+    <div style="margin-left:auto;text-align:right">
+      <div class="live-px">Rs{ltp:,.2f}</div>
+      <div class="live-chg" style="color:{chg_col}">{sign}{chg:.2f} ({sign}{pct:.2f}%)</div>
+    </div>
+  </div>
+  <div style="margin:6px 0">{sig_badges(r)}</div>
+  <div class="mgrid">
+    <div class="met"><div class="ml">52W High</div><div class="mv">Rs{r.get('high52',0):,.0f}</div></div>
+    <div class="met"><div class="ml">Dist 52W%</div>
+      <div class="mv" style="color:{'var(--sage)' if (r.get('dH',0) or 0)>=-2 else 'var(--t2)'}">{r.get('dH',0):.2f}%</div></div>
+    <div class="met"><div class="ml">Stk {rs_days}d%</div>
+      <div class="mv" style="color:{'var(--sage)' if (r.get('sp') or 0)>=0 else 'var(--coral)'}">{f"{r.get('sp',0):+.1f}%" if r.get('sp') is not None else "n/a"}</div></div>
+    <div class="met"><div class="ml">Sec {rs_days}d%</div>
+      <div class="mv" style="color:{'var(--sage)' if (r.get('xp') or 0)>=0 else 'var(--coral)'}">{f"{r.get('xp',0):+.1f}%" if r.get('xp') is not None else "n/a"}</div></div>
+    <div class="met"><div class="ml">21MA Dist</div><div class="mv" style="color:var(--tang)">{r.get('dS',0):.2f}%</div></div>
+    <div class="met"><div class="ml">RSI 14</div>
+      <div class="mv" style="color:{'var(--coral)' if (r.get('rsi') or 50)>70 else 'var(--sage)' if (r.get('rsi') or 50)<30 else 'var(--t1)'}">{r.get('rsi') or 'n/a'}</div></div>
+    <div class="met"><div class="ml">EPS TTM</div><div class="mv" style="color:var(--amber)">Rs{r.get('ttm') or 'n/a'}</div></div>
+    <div class="met"><div class="ml">P/E</div><div class="mv">{f"{pe}x" if pe else 'n/a'}</div></div>
+    <div class="met"><div class="ml">YoY EPS%</div>
+      <div class="mv" style="color:{'var(--sage)' if (yoy or 0)>=20 else 'var(--amber)' if (yoy or 0)>=10 else 'var(--coral)'}">{f"{yoy:+.1f}%" if yoy is not None else 'n/a'}</div></div>
+    <div class="met"><div class="ml">Fund Score</div><div class="mv" style="color:{fc}">{fs}/100</div></div>
+  </div>
+  {staircase_html(r)}
+  <div class="igrid">
+    <div class="ip"><div class="il" style="color:var(--amber)">Rule 1 — EPS Acceleration</div>
+      <div class="iv">{ac.get('grade','n/a')} | {ac.get('verdict','n/a')}</div>
+      <div class="is">Score:{ac.get('score',0)}/100  QoQ: {qoq_str or 'n/a'}</div></div>
+    <div class="ip"><div class="il" style="color:var(--lav)">Rule 2 — Surprise Factor</div>
+      <div class="iv">{sr.get('grade','n/a')} | {sr.get('verdict','n/a')}</div>
+      <div class="is">{f"Beat: +{sr.get('beat',0)}% vs estimate" if sr.get('beat') is not None else 'No analyst estimate'}</div></div>
+    <div class="ip"><div class="il" style="color:var(--sage)">Rule 3 — Sales Quality</div>
+      <div class="iv">{sqr.get('grade','n/a')} | {sqr.get('verdict','n/a')}</div>
+      <div class="is">EPS +{sqr.get('eps_g',0):.1f}%  Revenue +{sqr.get('sal_g',0):.1f}%</div></div>
+    <div class="ip"><div class="il" style="color:var(--sky)">Live Quote</div>
+      <div class="iv" style="color:var(--sage)">Rs{ltp:,.2f}</div>
+      <div class="is">Chg: {sign}{chg:.2f} ({sign}{pct:.2f}%)  ATR:{r.get('atr',0):.1f}</div></div>
+  </div>
+</div>""", unsafe_allow_html=True)
 
 # ===========================================================================
 #  MAIN UI
 # ===========================================================================
-# -- Header -------------------------------------------------------------------
 st.markdown("""
-<div class="screener-header">
-  <h1>🚀 NSE + BSE Multibagger Screener</h1>
-  <div class="sub">
-    ~5000 Stocks · EPS Acceleration · Surprise Factor · RS Resilience · 21MA Buy Zone · Upstox V2
-  </div>
-</div>
-""", unsafe_allow_html=True)
+<div class="hdr">
+  <h1>NSE + BSE Multibagger Screener</h1>
+  <div class="sub">Upstox Instrument CSV | EPS Accel + RS Resilience + 21MA Buy Zone | Live Prices for Results Only</div>
+</div>""", unsafe_allow_html=True)
 
 # ===========================================================================
 #  SIDEBAR
 # ===========================================================================
 with st.sidebar:
-    st.markdown("### 🚀 Multibagger Screener")
-    st.caption("NSE + BSE · v5.0 · Upstox V2")
+    st.markdown("**Screener v6.0**")
+    st.caption("Upstox V2 API | SQLite | Live Prices")
     st.divider()
 
-    # -- Universe ----------------------------------------------------------
-    st.markdown('<div class="sec-lbl">🌐 Universe</div>', unsafe_allow_html=True)
-
-    db_c = db_count()
-    col1, col2, col3 = st.columns(3)
-    col1.metric("NSE",  f"{db_c['nse']:,}")
-    col2.metric("BSE",  f"{db_c['bse']:,}")
-    col3.metric("Total",f"{db_c['total']:,}")
-    _sym_total = len(NSE_ALL) + len(BSE_ALL)
-    if db_c["total"] > 0:
-        pct_done = min(db_c["total"] / _sym_total * 100, 100)
-        st.progress(min(pct_done/100, 1.0))
-        st.caption(f"{'✅' if pct_done>=90 else '📥'} {db_c['total']:,} / {_sym_total:,} ({pct_done:.0f}%)")
-    else:
-        st.caption("📭 DB empty — click Download to build")
+    # Universe
+    st.markdown('<div class="sec-lbl">Universe</div>', unsafe_allow_html=True)
+    _dc=db_count()
+    sc1,sc2,sc3=st.columns(3)
+    sc1.metric("NSE",  f"{_dc['nse']:,}")
+    sc2.metric("BSE",  f"{_dc['bse']:,}")
+    sc3.metric("Total",f"{_dc['total']:,}")
+    if _dc["total"]>0:
+        st.progress(min(_dc["total"]/8000,1.0))
+        st.caption(f"{_dc['total']:,} / ~8,000 instruments ({_dc['total']/80:.0f}%)")
 
     if st.session_state.get("dl_running"):
-        st.info(f"⏳ {st.session_state.get('dl_msg','Downloading…')}")
+        st.info(st.session_state.get("dl_msg","Downloading...")[:80])
 
-    dc1, dc2 = st.columns(2)
-    with dc1:
-        if st.button("⬇️ Download Stocks", use_container_width=True,
-                     disabled=st.session_state.get("dl_running", False),
-                     help="50 NSE + 50 BSE per batch via Upstox API. Token required."):
-            tok_val = st.session_state.get("token_input","")
-            if not tok_val:
-                st.error("⚠️ Verify token first")
-            else:
-                st.session_state.dl_running = True
-                st.session_state.dl_msg     = "Starting…"
-                st.session_state.dl_error   = ""
-                st.rerun()
-    with dc2:
-        if st.button("🗑 Clear DB", use_container_width=True):
-            try:
-                if DB_PATH.exists(): DB_PATH.unlink()
-                load_universe_cache.clear()
-                st.rerun()
-            except Exception as _e:
-                st.error(str(_e))
+    if st.button("Download Full Instrument List",use_container_width=True,
+                 disabled=st.session_state.get("dl_running",False)):
+        st.session_state.dl_running=True; st.session_state.dl_msg="Starting..."
+        st.session_state.dl_error=""; st.rerun()
+
+    if st.button("Clear DB",use_container_width=True,key="sb_clr"):
+        if DB_PATH.exists(): DB_PATH.unlink()
+        load_universe.clear(); st.rerun()
 
     if st.session_state.get("dl_error"):
-        st.warning(st.session_state.dl_error)
-        if st.button("Clear error", key="clr_dl"):
-            st.session_state.dl_error=""
-            st.rerun()
-
-
-
-
+        st.error(st.session_state.dl_error[:160])
 
     st.divider()
 
-    # -- Token -------------------------------------------------------------
-    st.markdown('<div class="sec-lbl">🔑 Upstox Token</div>', unsafe_allow_html=True)
-
-    # Connection status indicator
-    ts = st.session_state.token_status
-    if ts == "valid":
+    # Token
+    st.markdown('<div class="sec-lbl">Token</div>', unsafe_allow_html=True)
+    ts=st.session_state.token_status
+    if ts=="valid":
         st.markdown(
-            f'<div style="background:rgba(78,207,143,.12);border:1px solid rgba(78,207,143,.3);'
-            f'border-radius:7px;padding:8px 12px;font-size:.72rem;color:var(--sage);margin-bottom:8px">'
-            f'● Connected · {st.session_state.token_user}</div>',
-            unsafe_allow_html=True
-        )
-    elif ts == "invalid":
+            f'<div style="background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);'
+            f'border-radius:7px;padding:6px 10px;font-size:.68rem;color:var(--sage)">'
+            f'Connected: {st.session_state.token_user}</div>',unsafe_allow_html=True)
+    elif ts=="invalid":
         st.markdown(
-            '<div style="background:rgba(240,112,112,.1);border:1px solid rgba(240,112,112,.3);'
-            'border-radius:7px;padding:8px 12px;font-size:.72rem;color:var(--coral);margin-bottom:8px">'
-            f'● Invalid token: {st.session_state.get("token_error","")[:60]}</div>',
-            unsafe_allow_html=True
-        )
+            '<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);'
+            'border-radius:7px;padding:6px 10px;font-size:.68rem;color:var(--coral)">Invalid token</div>',
+            unsafe_allow_html=True)
 
-    token = st.text_input("Access Token", type="password",
-                          placeholder="Paste bearer token…", key="token_input")
-
-    if st.button("🔌 Verify Token", use_container_width=True):
+    token=st.text_input("Access Token",type="password",placeholder="Paste bearer token...",
+                         key="token_input")
+    if st.button("Verify Token",use_container_width=True):
         if token.strip():
-            with st.spinner("Connecting to Upstox…"):
-                vr = verify_token(token.strip())
+            with st.spinner("Verifying..."): vr=verify_token(token.strip())
             if vr["ok"]:
-                st.session_state.token_status = "valid"
-                st.session_state.token_user   = vr["name"]
-                st.session_state.token_error  = ""
-                st.success(f"✅ Connected as {vr['name']} ({vr['email']})")
+                st.session_state.token_status="valid"; st.session_state.token_user=vr["name"]
+                st.success(f"Connected as {vr['name']}")
             else:
-                st.session_state.token_status = "invalid"
-                st.session_state.token_user   = ""
-                st.session_state.token_error  = vr["error"]
-                st.error(f"❌ {vr['error']}")
+                st.session_state.token_status="invalid"
+                st.error(vr.get("error","Invalid"))
             st.rerun()
-        else:
-            st.warning("Paste your token first.")
-
-    st.caption("① upstox.com/developer → Your App\n② OAuth2 flow → copy access_token\n③ Valid for 1 trading day")
-
-    with st.expander("📥 Manual instruments.json (if download fails)"):
-        st.markdown("""
-**If automatic download fails (403/401 error):**
-
-1. Log into [Upstox Developer Console](https://developer.upstox.com)
-2. Go to **API Docs** → **Instruments** → Download CSV/JSON
-3. Or run in terminal with your token:
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  "https://api.upstox.com/v2/instruments?exchange=NSE_EQ" \
-  -o instruments.json
-```
-4. Place `instruments.json` in the **same folder** as `screener_st.py`
-5. Click **⬇️ Download All ~8000 Stocks** — it will pick up the file automatically
-        """)
+        else: st.warning("Paste token first")
 
     st.divider()
 
-    # -- EPS Filters -------------------------------------------------------
-    st.markdown('<div class="sec-lbl">📊 EPS Filters</div>', unsafe_allow_html=True)
-    min_eps  = st.slider("Min TTM EPS (₹)",      0, 120,  10, 2)
-    min_yoy  = st.slider("Min YoY EPS Growth %", 0, 100,  20, 5)
-    req_accel = st.checkbox("EPS Accelerating (Staircase)", value=True)
-    req_surp  = st.checkbox("Analyst Beat Required",         value=False)
-    req_qual  = st.checkbox("Sales + EPS Quality",           value=True)
+    # EPS Filters
+    st.markdown('<div class="sec-lbl">EPS Filters</div>', unsafe_allow_html=True)
+    min_eps   = st.slider("Min TTM EPS (Rs)",      0,120, 10,2)
+    min_yoy   = st.slider("Min YoY EPS Growth %",  0,100, 20,5)
+    req_eps   = st.checkbox("Apply EPS filter",   value=True)
+    req_yoy   = st.checkbox("Apply YoY filter",   value=True)
+    req_accel = st.checkbox("Require Accel",       value=False)
+    req_surp  = st.checkbox("Require Beat Est",    value=False)
+    req_qual  = st.checkbox("Require Sales+EPS",   value=False)
 
     st.divider()
 
-    # -- Technical Filters -------------------------------------------------
-    st.markdown('<div class="sec-lbl">📈 Technical Filters</div>', unsafe_allow_html=True)
-    rs_days   = st.slider("RS Lookback Days",           5,   30,   20)
-    high_prox = st.slider("Max Dist 52W High %",        1.0,  8.0,  2.0, 0.5)
-    sec_drop  = st.slider("Sector Drop Threshold %",  -10.0, -1.0, -3.0, 0.5)
-    bz_hi     = st.slider("21MA BuyZone Upper %",       0.5,  5.0,  1.5, 0.5)
-    min_vol   = st.number_input("Min Avg Daily Volume",
-                                min_value=10_000, value=100_000, step=50_000)
+    # Technical Filters
+    st.markdown('<div class="sec-lbl">Technical Filters</div>', unsafe_allow_html=True)
+    rs_days   = st.slider("RS Lookback Days",        5, 30, 20)
+    high_prox = st.slider("Max Dist 52W High %",   1.0,10.0,5.0,0.5)
+    sec_drop  = st.slider("Sector Drop %",        -15.0,-1.0,-3.0,0.5)
+    bz_hi     = st.slider("21MA BuyZone Upper %",  0.5, 8.0, 3.0,0.5)
+    req_rs    = st.checkbox("Require RS Leader",   value=False)
+    req_bz    = st.checkbox("Require BuyZone",     value=False)
+    min_vol   = st.number_input("Min Avg Volume",  min_value=0,value=50000,step=25000)
 
     st.divider()
 
-    cfg = dict(
-        rs_days=rs_days, high_prox=high_prox, sec_drop=sec_drop,
-        stk_min=0.0, bz_lo=0.0, bz_hi=bz_hi,
-        min_eps=float(min_eps), min_yoy=float(min_yoy),
-        req_accel=req_accel, req_surp=req_surp, req_qual=req_qual,
-        min_vol=int(min_vol),
-    )
+    cfg=dict(rs_days=rs_days,high_prox=high_prox,sec_drop=sec_drop,stk_min=0.0,
+             bz_lo=0.0,bz_hi=bz_hi,min_eps=float(min_eps),min_yoy=float(min_yoy),
+             req_eps=req_eps,req_yoy=req_yoy,req_accel=req_accel,
+             req_surp=req_surp,req_qual=req_qual,req_rs=req_rs,req_bz=req_bz,
+             min_vol=int(min_vol))
 
-    # -- Run / Stop --------------------------------------------------------
-    run_col, stop_col = st.columns([3, 1])
-    with run_col:
-        run_btn = st.button("🔍 RUN FULL SCAN", use_container_width=True,
-                            disabled=st.session_state.scan_running)
-    with stop_col:
-        if st.button("⏹", disabled=not st.session_state.scan_running,
-                     help="Stop scan"):
-            st.session_state.scan_running = False
+    rc1,rc2=st.columns([3,1])
+    with rc1: run_btn=st.button("RUN FULL SCAN",use_container_width=True,
+                                 disabled=st.session_state.scan_running)
+    with rc2:
+        if st.button("Stop",disabled=not st.session_state.scan_running):
+            _su(running=False); st.session_state.scan_running=False
 
     if st.session_state.last_scan_time:
         st.caption(f"Last: {st.session_state.last_scan_time}")
 
     st.divider()
-    # -- Utility -----------------------------------------------------------
-    st.markdown('<div class="sec-lbl">🛠 Utilities</div>', unsafe_allow_html=True)
-    if st.button("📊 Refresh EPS Data (NSE)", use_container_width=True):
-        with st.spinner("Fetching NSE quarterly results…"):
+    st.markdown('<div class="sec-lbl">Live Prices</div>', unsafe_allow_html=True)
+    if st.button("Refresh Live Prices",use_container_width=True,
+                 disabled=not bool(st.session_state.results)):
+        if token and st.session_state.results:
+            with st.spinner("Fetching live prices for results..."):
+                lp=fetch_full_quotes([r["ikey"] for r in st.session_state.results],token)
+            st.session_state.live_prices=lp
+            st.session_state.live_updated=datetime.datetime.now().strftime("%H:%M:%S")
+            st.rerun()
+    if st.session_state.live_updated:
+        st.caption(f"Updated: {st.session_state.live_updated}")
+
+    st.divider()
+    if st.button("Refresh EPS Data",use_container_width=True):
+        with st.spinner("Fetching NSE quarterly results..."):
             try:
-                hdrs = {"User-Agent":"Mozilla/5.0","Accept":"application/json",
-                        "Referer":"https://www.nseindia.com"}
-                sess = requests.Session()
-                sess.get("https://www.nseindia.com", headers=hdrs, timeout=10)
-                r = sess.get("https://www.nseindia.com/api/corporates-financial-results",
-                             headers=hdrs, params={"index":"equities","period":"Quarterly"}, timeout=20)
-                if r.status_code == 200:
-                    fd = get_fundamentals()
+                hdrs={"User-Agent":"Mozilla/5.0","Referer":"https://www.nseindia.com","Accept":"application/json"}
+                s=requests.Session()
+                s.get("https://www.nseindia.com",headers=hdrs,timeout=10)
+                r=s.get("https://www.nseindia.com/api/corporates-financial-results",
+                    headers=hdrs,params={"index":"equities","period":"Quarterly"},timeout=20)
+                if r.status_code==200:
+                    fd=get_fundamentals()
                     for rec in r.json():
-                        sym = rec.get("symbol","").upper()
-                        eps = rec.get("eps")
-                        rev = rec.get("reIncome")
-                        if sym and eps:
-                            if sym not in fd:
-                                fd[sym] = {"eps":[], "sales":[], "est":None}
-                            fd[sym]["eps"] = (fd[sym]["eps"] + [float(eps)])[-4:]
-                            if rev:
-                                fd[sym]["sales"] = (fd[sym]["sales"] + [float(rev)])[-4:]
-                    FUND_DATA_PATH.write_text(json.dumps(fd, separators=(",",":")))
-                    st.success(f"✅ Updated {len(fd)} symbols")
-                else:
-                    st.warning("NSE returned non-200; try again after market hours.")
-            except Exception as e:
-                st.error(f"Failed: {e}")
+                        sym=rec.get("symbol","").upper(); ev=rec.get("eps"); rv=rec.get("reIncome")
+                        if sym and ev:
+                            if sym not in fd: fd[sym]={"eps":[],"sales":[],"est":None}
+                            fd[sym]["eps"]=(fd[sym]["eps"]+[float(ev)])[-4:]
+                            if rv: fd[sym]["sales"]=(fd[sym]["sales"]+[float(rv)])[-4:]
+                    FUND_PATH.write_text(json.dumps(fd,separators=(",",":")))
+                    get_fundamentals.clear()
+                    st.success(f"Updated {len(fd)} symbols")
+                else: st.warning(f"NSE HTTP {r.status_code}")
+            except Exception as e: st.error(str(e))
 
 # ===========================================================================
-#  BACKGROUND DOWNLOAD RUNNER
+#  DOWNLOAD RUNNER
 # ===========================================================================
 if st.session_state.get("dl_running"):
-    tok_dl = st.session_state.get("token_input","")
-    if tok_dl:
-        st.markdown("### ⬇️ Building Stock Database…")
-        _dl_bar = st.progress(0.0)
-        _dl_msg = st.empty()
-        _dl_stat = st.empty()
-
-        def _dl_cb(pct, msg):
-            _dl_bar.progress(min(float(pct), 1.0))
-            _dl_msg.caption(msg)
-            st.session_state.dl_msg = msg
-            _c = db_count()
-            _dl_stat.caption(
-                f"Live DB: {_c['total']:,}  ({_c['nse']:,} NSE + {_c['bse']:,} BSE)"
-            )
-
-        _res = download_universe_batches(tok_dl, _dl_cb)
-        load_universe_cache.clear()
-        st.session_state.dl_running = False
-        if _res["errors"]:
-            st.session_state.dl_error = (
-                f"⚠️ {len(_res['errors'])} batch errors.\n"
-                + "\n".join(_res["errors"][:8])
-            )
-        _cf = db_count()
-        st.success(
-            f"✅ Added {_res['nse_added']} NSE + {_res['bse_added']} BSE.  "
-            f"DB total: {_cf['total']:,}"
-        )
-        st.rerun()
+    tok_dl=st.session_state.get("token_input","")
+    if not tok_dl:
+        st.session_state.dl_running=False
+        st.error("Paste and verify token before downloading.")
     else:
-        st.session_state.dl_running = False
+        st.markdown("### Downloading Full Instrument List from Upstox...")
+        _bar=st.progress(0.0); _msg=st.empty(); _stat=st.empty()
+        def _dlcb(pct,msg):
+            _bar.progress(min(float(pct),1.0)); _msg.markdown(f"**{msg}**")
+            st.session_state.dl_msg=msg
+            c=db_count()
+            _stat.markdown(f"**DB:** {c['total']:,} instruments  ({c['nse']:,} NSE + {c['bse']:,} BSE)")
+        res=download_instruments_full(tok_dl,_dlcb)
+        load_universe.clear()
+        st.session_state.dl_running=False
+        if res["ok"]:
+            st.session_state.dl_error=""
+            st.success(f"{res['total']:,} instruments downloaded  ({res['nse']:,} NSE + {res['bse']:,} BSE)  |  {res.get('new',0):,} new")
+        else:
+            st.session_state.dl_error=res["error"]
+            st.error(f"Download failed: {res['error'][:300]}")
+        st.rerun()
 
 # ===========================================================================
 #  LAUNCH SCAN
 # ===========================================================================
 if run_btn:
     if not token:
-        st.error("⚠️ Please enter your Upstox Access Token in the sidebar.")
-        st.stop()
-    uni_now = load_universe_cache()
-    load_universe_cache.clear()
-    fd      = get_fundamentals()
-    # Reset shared scan state
-    _scan_update(running=True, done=False, error="", progress=0.0,
-                 results=[], log=[], msg="Starting…",
-                 stats={"total": len(uni_now), "processed": 0, "passed": 0, "perfect": 0})
-    # Reset session state flags
-    st.session_state.results       = []
-    st.session_state.scan_running  = True
-    st.session_state.scan_done     = False
-    st.session_state.scan_progress = 0.0
-    t = threading.Thread(
-        target=run_scan_thread,
-        args=(token, cfg, uni_now, fd),
-        daemon=True,
-    )
-    t.start()
+        st.error("Paste and verify your Upstox token first."); st.stop()
+    uni_now=load_universe(); load_universe.clear()
+    if not uni_now:
+        st.error("DB is empty. Download instrument list first."); st.stop()
+    fd=get_fundamentals()
+    _su(running=True,done=False,error="",progress=0.0,results=[],log=[],
+        stats={"total":len(uni_now),"processed":0,"passed":0,"perfect":0})
+    st.session_state.results=[]; st.session_state.scan_running=True
+    st.session_state.scan_done=False; st.session_state.live_prices={}
+    _th.Thread(target=run_scan_thread,args=(token,cfg,uni_now,fd),daemon=True).start()
     st.rerun()
 
 # ===========================================================================
-#  PROGRESS BAR  (auto-refreshes while scanning)
+#  SCAN PROGRESS
 # ===========================================================================
-# -- Sync _SCAN → session_state (safe: main thread only) ------------------
 if st.session_state.scan_running:
-    with _SCAN_LOCK:
-        snap = dict(_SCAN)          # read snapshot under lock
-
-    pct   = snap["progress"]
-    stats = snap["stats"]
-    msg   = snap["msg"]
-    done  = snap["done"]
-    err   = snap["error"]
-
-    if done:
-        # Scan finished (or crashed) — copy results to session_state
-        st.session_state.scan_running   = False
-        st.session_state.scan_done      = True
-        st.session_state.results        = snap["results"]
-        st.session_state.scan_progress  = 1.0
-        st.session_state.last_scan_time = datetime.datetime.now().strftime("%d %b %Y  %H:%M IST")
-        if err:
-            st.session_state.scan_error = err
+    with _LOCK: snap=dict(_SCAN)
+    if snap["done"]:
+        st.session_state.scan_running=False; st.session_state.scan_done=True
+        st.session_state.results=snap["results"]
+        st.session_state.last_scan_time=datetime.datetime.now().strftime("%d %b %Y  %H:%M IST")
+        if snap["error"]: st.session_state.scan_error=snap["error"]
+        # Auto-fetch live prices for results immediately
+        if snap["results"] and token:
+            with st.spinner(f"Fetching live prices for {len(snap['results'])} results..."):
+                lp=fetch_full_quotes([r["ikey"] for r in snap["results"]],token)
+            st.session_state.live_prices=lp
+            st.session_state.live_updated=datetime.datetime.now().strftime("%H:%M:%S")
         st.rerun()
     else:
-        # Still running — show live progress
-        st.markdown('<div class="prog-box"><div class="plbl scanning">● SCANNING</div></div>',
+        pct=snap["progress"]; stats=snap["stats"]; msg=snap["msg"]
+        st.markdown('<div class="prog-box"><div class="plbl scanning">SCANNING...</div></div>',
                     unsafe_allow_html=True)
-        st.progress(min(float(pct), 1.0))
-        st.caption(msg)
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total",     stats.get("total", 0))
-        c2.metric("Processed", stats.get("processed", 0))
-        c3.metric("Passed",    stats.get("passed", 0))
-        c4.metric("⭐ Perfect", stats.get("perfect", 0))
-
-        # Show scan log in expander (live debugging)
-        log_lines = snap.get("log", [])
+        st.progress(min(float(pct),1.0)); st.caption(msg)
+        c1,c2,c3,c4=st.columns(4)
+        c1.metric("Total",stats.get("total",0)); c2.metric("Processed",stats.get("processed",0))
+        c3.metric("Passed",stats.get("passed",0)); c4.metric("Perfect",stats.get("perfect",0))
+        with _LOCK: log_lines=list(_SCAN.get("log",[]))
         if log_lines:
-            with st.expander(f"📋 Scan Log ({len(log_lines)} entries)", expanded=False):
-                st.code("\n".join(log_lines[-30:]), language=None)
-
-        time.sleep(2)
-        st.rerun()
-
-# ===========================================================================
-#  RESULTS
-# ===========================================================================
-results = st.session_state.results
-
-# Show any scan error that occurred
-if st.session_state.get("scan_error"):
-    with st.expander("❌ Scan Error Log", expanded=True):
-        st.code(st.session_state.scan_error, language=None)
-    if st.button("Clear Error"):
-        st.session_state.scan_error = ""
-        st.rerun()
-
-# Show scan log from _SCAN after completion
-if st.session_state.scan_done and not st.session_state.scan_running:
-    with _SCAN_LOCK:
-        log_snap = list(_SCAN.get("log", []))
-    if log_snap:
-        with st.expander(f"📋 Last Scan Log ({len(log_snap)} entries)", expanded=False):
-            st.code("\n".join(log_snap), language=None)
-
-if not results and not st.session_state.scan_running:
-    # -- Welcome screen ----------------------------------------------------
-    st.markdown('<div class="sec-lbl">📖 The Three EPS Rules for Multibaggers</div>',
-                unsafe_allow_html=True)
-    rc1, rc2, rc3 = st.columns(3)
-    with rc1:
-        st.markdown("""<div class="rule-card">
-          <div class="rule-num" style="color:var(--amber)">Rule 01 — Acceleration</div>
-          <h4>📈 The Staircase Pattern</h4>
-          <p>Each quarter's growth must be <strong style="color:var(--t1)">higher than the last</strong>.
-             Q1 +10% → Q2 +20% → Q3 +40% signals a <strong style="color:var(--sage)">parabolic run</strong>.</p>
-          <div class="rule-ex" style="color:var(--sage)">+10% → +20% → +40% = 🚀 Parabolic Signal</div>
-        </div>""", unsafe_allow_html=True)
-    with rc2:
-        st.markdown("""<div class="rule-card">
-          <div class="rule-num" style="color:var(--lav)">Rule 02 — Surprise Factor</div>
-          <h4>🎯 Beat the Estimate</h4>
-          <p>The biggest multibaggers occur when EPS is <strong style="color:var(--t1)">much higher than
-             analysts expected</strong>. A 20%+ beat forces rapid institutional re-rating.</p>
-          <div class="rule-ex" style="color:var(--lav)">Actual > Estimate by 20% = 🎯 Re-rating Catalyst</div>
-        </div>""", unsafe_allow_html=True)
-    with rc3:
-        st.markdown("""<div class="rule-card">
-          <div class="rule-num" style="color:var(--sage)">Rule 03 — Sales Quality</div>
-          <h4>🏆 Sales + EPS Together</h4>
-          <p>EPS up while <strong style="color:var(--coral)">Sales are flat</strong> = cost cutting only.
-             True multibaggers have <strong style="color:var(--sage)">both Revenue and EPS expanding</strong>.</p>
-          <div class="rule-ex" style="color:var(--sage)">Revenue ↑ + EPS ↑ = 🏆 Grade A+ Organic Growth</div>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown('<div class="sec-lbl">⭐ The Perfect Setup</div>', unsafe_allow_html=True)
-    st.markdown("""<div class="setup-box">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:2px;
-                  color:var(--sage);margin-bottom:10px">★ PERFECT SETUP CHECKLIST</div>
-      <div class="setup-row">
-        <div class="si"><div class="sil">Sector</div><div class="siv">Falling 4–5%</div></div>
-        <div class="si"><div class="sil">Stock Price</div><div class="siv">Near 52W High, hugging 21MA</div></div>
-        <div class="si"><div class="sil">EPS Growth</div><div class="siv">&gt;20% YoY + Accelerating QoQ</div></div>
-        <div class="si"><div class="sil">Sales Quality</div><div class="siv">Revenue expanding with EPS</div></div>
-        <div class="si"><div class="sil">Action</div><div class="siv" style="color:var(--sage)">Sector turns up → Buy breakout</div></div>
-      </div>
-    </div>""", unsafe_allow_html=True)
-
-    _wdb = db_count()
-    if _wdb["total"] > 0:
-        st.info(
-            f"**{_wdb['total']:,} stocks in database**  "
-            f"({_wdb['nse']:,} NSE + {_wdb['bse']:,} BSE)\n\n"
-            "**Step 1:** Paste & verify Upstox token  \n"
-            "**Step 2:** Click **🔍 RUN FULL SCAN**"
-        )
-    else:
-        st.info(
-            f"**{len(DEFAULT_UNIVERSE)} default stocks ready** — scan works immediately.\n\n"
-            "**Step 1:** Paste & verify token → **Step 2:** RUN FULL SCAN  \n\n"
-            "📥 Click **⬇️ Download Stocks** to build your full database "
-            "(50 NSE + 50 BSE per batch, stored in universe.db)."
-        )
-    st.stop()
-
-# -- Exchange filter -----------------------------------------------------------
-exch_opts  = ["All", "NSE", "BSE"]
-exch_sel   = st.radio("Exchange Filter:", exch_opts, horizontal=True,
-                       index=exch_opts.index(st.session_state.exch_filter))
-st.session_state.exch_filter = exch_sel
-
-def filtered(rows: list) -> list:
-    if exch_sel == "All":
-        return rows
-    return [r for r in rows if r.get("exch","") == exch_sel]
-
-frows = filtered(results)
-
-# -- KPI strip -----------------------------------------------------------------
-perfects   = [r for r in frows if r.get("perfect")]
-rs_leaders = [r for r in frows if r.get("rs_leader")]
-bz_stocks  = [r for r in frows if r.get("in_bz")]
-accel_rows = [r for r in frows if r.get("ac_ok")]
-surp_rows  = [r for r in frows if r.get("sr_ok")]
-
-st.markdown(
-    f'<div class="kpi-row">'
-    f'{kpi(len(frows),    "Screened",     "c-sky")}'
-    f'{kpi(len(rs_leaders),"RS Leaders",  "c-sage")}'
-    f'{kpi(len(bz_stocks), "Buy Zone",    "c-sky")}'
-    f'{kpi(len(accel_rows),"EPS Accel",   "c-amber")}'
-    f'{kpi(len(surp_rows), "Analyst Beat","c-lav")}'
-    f'{kpi(len(perfects),  "⭐ Perfect",  "c-tang")}'
-    f'</div>',
-    unsafe_allow_html=True
-)
+            with st.expander(f"Scan Log ({len(log_lines)})"):
+                st.code("\n".join(log_lines[-40:]))
+        time.sleep(2); st.rerun()
 
 # ===========================================================================
 #  TABS
 # ===========================================================================
-tab_perf, tab_eps, tab_all, tab_charts, tab_exp, tab_db = st.tabs([
-    "⭐ Perfect Setups", "🔬 EPS Deep Dive",
-    "📋 Full Results",   "📊 Charts", "💾 Export", "🗄️ Database"
+results=st.session_state.results
+live=st.session_state.live_prices
+
+if st.session_state.get("scan_error"):
+    with st.expander("Scan Error",expanded=True): st.code(st.session_state.scan_error)
+    if st.button("Clear"): st.session_state.scan_error=""; st.rerun()
+
+tab_res, tab_live, tab_charts, tab_inst, tab_exp = st.tabs([
+    "Scan Results", "Live Watchlist", "Charts", "Instrument DB", "Export"
 ])
 
-# -- TAB 1: Perfect Setups -----------------------------------------------------
-with tab_perf:
-    show_rows = perfects if perfects else frows[:6]
-    if perfects:
+# ---- TAB 1: Scan Results ----
+with tab_res:
+    if not results and not st.session_state.scan_running:
+        st.markdown('<div class="sec-lbl">Screener Logic</div>', unsafe_allow_html=True)
+        c1,c2,c3,c4=st.columns(4)
+        for col_ctx,title,color,body in [
+            (c1,"52-Week High","var(--amber)",
+             "Stock must be within X% of its 52W high — near highs shows institutional accumulation, not dead money."),
+            (c2,"RS Resilience","var(--sky)",
+             "When sector drops 3-5%, stock stays flat or rises. Relative strength signals smart money buying."),
+            (c3,"21MA Buy Zone","var(--tang)",
+             "Price 0-3% above 21-day SMA = low-risk entry. Tight to moving average = uptrend intact."),
+            (c4,"EPS Rules (3)","var(--sage)",
+             "Acceleration (staircase growth), Surprise (beat estimate), Sales Quality (organic not cost-cuts).")
+        ]:
+            with col_ctx:
+                st.markdown(f"""<div style="background:var(--card);border:1px solid var(--border);
+border-radius:10px;padding:14px">
+<div style="font-family:var(--mono);font-size:.57rem;color:{color};letter-spacing:2px;
+margin-bottom:6px;text-transform:uppercase">{title}</div>
+<div style="font-size:.72rem;color:var(--t2);line-height:1.6">{body}</div>
+</div>""",unsafe_allow_html=True)
+        st.info("Step 1: Download instruments  |  Step 2: Verify token  |  Step 3: RUN FULL SCAN")
+    else:
+        # KPIs
+        perf_c=[r for r in results if r.get("perfect")]
+        rs_c=[r for r in results if r.get("rs_leader")]
+        bz_c=[r for r in results if r.get("in_bz")]
+        ac_c=[r for r in results if r.get("ac_ok")]
         st.markdown(
-            f'<div class="sec-lbl">⭐ {len(perfects)} Perfect Setup{"s" if len(perfects)>1 else ""} — All 5 Signals Green</div>',
-            unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="sec-lbl">📌 Top Candidates (no Perfect Setups — try relaxing thresholds)</div>',
-                    unsafe_allow_html=True)
+            f'<div class="kpis">'
+            f'<div class="kpi"><div class="v csky">{len(results)}</div><div class="l">Passed</div></div>'
+            f'<div class="kpi"><div class="v csage">{len(rs_c)}</div><div class="l">RS Leaders</div></div>'
+            f'<div class="kpi"><div class="v ctang">{len(bz_c)}</div><div class="l">Buy Zone</div></div>'
+            f'<div class="kpi"><div class="v camb">{len(ac_c)}</div><div class="l">EPS Accel</div></div>'
+            f'<div class="kpi"><div class="v csage">{len(perf_c)}</div><div class="l">Perfect</div></div>'
+            f'</div>',unsafe_allow_html=True)
 
-    for i, r in enumerate(show_rows):
-        label = f"{'⭐ ' if r.get('perfect') else '📌 '}{r.get('sym','')}  ·  {r.get('name','')}  ·  ₹{r.get('price',0):,.2f}  ·  Fund Score: {r.get('fs',0)}/100"
-        with st.expander(label, expanded=r.get("perfect", False)):
-            render_stock_card(r, rs_days, expanded=True)
+        exch_sel=st.radio("Exchange:",["All","NSE","BSE"],horizontal=True,key="res_exch")
+        frows=results if exch_sel=="All" else [r for r in results if r.get("exch")==exch_sel]
 
-    # RS Leaders (not perfect)
-    rs_not_perfect = [r for r in rs_leaders if not r.get("perfect")]
-    if rs_not_perfect:
-        st.markdown('<div class="sec-lbl">✅ RS Leaders (not yet in buy zone)</div>',
-                    unsafe_allow_html=True)
-        for r in rs_not_perfect[:10]:
-            with st.expander(f"✅ {r.get('sym','')}  ·  {r.get('name','')}  ·  ₹{r.get('price',0):,.2f}"):
-                render_stock_card(r, rs_days, expanded=False)
+        if perf_c:
+            st.markdown('<div class="sec-lbl">PERFECT SETUPS — All 4 Signals Green</div>',
+                        unsafe_allow_html=True)
+            for r in [x for x in perf_c if exch_sel=="All" or x.get("exch")==exch_sel]:
+                with st.expander(
+                    f"{r.get('sym','')}  |  {r.get('name','')}  |  "
+                    f"Rs{live.get(r.get('ikey',''),{}).get('ltp') or r.get('price',0):,.2f}  |  "
+                    f"Score:{r.get('fs',0)}/100",expanded=True):
+                    render_card(r,live,rs_days)
+                    fig=chart_eps(r)
+                    if fig.data: st.plotly_chart(fig,use_container_width=True,
+                                                 key=f"c_{r['sym']}_{r.get('exch','')}")
 
-# -- TAB 2: EPS Deep Dive ------------------------------------------------------
-with tab_eps:
-    st.markdown('<div class="sec-lbl">🔬 EPS Deep Dive — All Screened Stocks</div>',
+        non_p=[r for r in frows if not r.get("perfect")]
+        if non_p:
+            st.markdown(f'<div class="sec-lbl">ALL PASSING STOCKS ({len(non_p)})</div>',
+                        unsafe_allow_html=True)
+            for r in non_p:
+                with st.expander(
+                    f"{r.get('sym','')} [{r.get('exch','')}]  |  {r.get('name','')}  |  "
+                    f"Rs{live.get(r.get('ikey',''),{}).get('ltp') or r.get('price',0):,.2f}  |  "
+                    f"Score:{r.get('fs',0)}/100",expanded=False):
+                    render_card(r,live,rs_days)
+
+# ---- TAB 2: Live Watchlist ----
+with tab_live:
+    st.markdown('<div class="sec-lbl">Live Watchlist — Scan Results Only</div>',
                 unsafe_allow_html=True)
-    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
-    with f_col1: f_accel = st.checkbox("📈 EPS Accel Only", key="f_accel")
-    with f_col2: f_beat  = st.checkbox("🎯 Beat Only",      key="f_beat")
-    with f_col3: f_qual  = st.checkbox("🏆 Sales+EPS Only", key="f_qual")
-    with f_col4: f_perf  = st.checkbox("⭐ Perfect Only",   key="f_perf")
-
-    eps_rows = [r for r in frows if r.get("eps")]
-    if f_accel: eps_rows = [r for r in eps_rows if r.get("ac_ok")]
-    if f_beat:  eps_rows = [r for r in eps_rows if r.get("sr_ok")]
-    if f_qual:  eps_rows = [r for r in eps_rows if r.get("sq_ok")]
-    if f_perf:  eps_rows = [r for r in eps_rows if r.get("perfect")]
-
-    if not eps_rows:
-        st.info("No stocks match the selected filters.")
+    if not results:
+        st.info("Run a scan first. Live prices are fetched only for stocks that pass the filters.")
     else:
-        for r in eps_rows:
-            yoy_str = fmt_pct(r.get("yoy"))
-            label   = f"{r.get('sym','')} [{r.get('exch','?')}]  ·  YoY: {yoy_str}  ·  Fund: {r.get('fs',0)}/100  ·  {r.get('ac',{}).get('verdict','')}"
-            with st.expander(label):
-                st.plotly_chart(chart_eps_staircase(r), use_container_width=True,
-                                key=f"eps_dive_{r['sym']}_{r.get('exch','')}")
-                ac  = r.get("ac",{})
-                sr  = r.get("sr",{})
-                sqr = r.get("sq",{})
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("TTM EPS",     f"₹{r.get('ttm','—')}")
-                c2.metric("P/E",         f"{r.get('pe','—')}x" if r.get("pe") else "—")
-                c3.metric("Accel Score", f"{ac.get('score',0)}/100")
-                c4.metric("Sales Growth",f"+{sqr.get('sal_g',0):.1f}%")
+        lc1,lc2=st.columns([4,1])
+        with lc2:
+            if st.button("Refresh Now",use_container_width=True):
+                if token:
+                    with st.spinner("Fetching..."):
+                        lp=fetch_full_quotes([r["ikey"] for r in results],token)
+                    st.session_state.live_prices=lp
+                    st.session_state.live_updated=datetime.datetime.now().strftime("%H:%M:%S")
+                    live=lp; st.rerun()
+        with lc1:
+            st.caption(f"{len(results)} stocks in watchlist" +
+                       (f"  |  Last updated: {st.session_state.live_updated}"
+                        if st.session_state.live_updated else "  |  Not yet fetched"))
 
-                beat_str = f"+{sr.get('beat')}% vs estimate" if sr.get("beat") else "No estimate"
-                st.markdown(
-                    f'<div style="font-size:.72rem;color:var(--t3);margin-top:8px">'
-                    f'<strong style="color:var(--t2)">EPS Accel:</strong> {ac.get("verdict","—")}  ·  '
-                    f'<strong style="color:var(--t2)">Surprise:</strong> {sr.get("verdict","—")} ({beat_str})  ·  '
-                    f'<strong style="color:var(--t2)">Sales Quality:</strong> {sqr.get("verdict","—")}'
-                    f'</div>', unsafe_allow_html=True
-                )
+        rows=[]
+        for r in results:
+            li=live.get(r.get("ikey",""),{})
+            ltp=li.get("ltp") or r.get("price",0)
+            rows.append({
+                "Symbol":  r.get("sym",""),    "Name":    r.get("name","")[:20],
+                "Exch":    r.get("exch",""),   "Sector":  r.get("sector","")[:16],
+                "LTP":     round(ltp,2),        "Chg":     li.get("chg",0),
+                "Chg%":    li.get("pct",0),
+                "52W%":    r.get("dH",0),       "21MA%":   r.get("dS",0),
+                "RS":      "Y" if r.get("rs_leader") else "",
+                "BZ":      "Y" if r.get("in_bz")     else "",
+                "YoY%":    r.get("yoy"),         "F.Score": r.get("fs",0),
+                "Perfect": "Y" if r.get("perfect") else "",
+            })
+        df_live=pd.DataFrame(rows)
+        st.dataframe(df_live,use_container_width=True,hide_index=True,
+            column_config={
+                "LTP":    st.column_config.NumberColumn("LTP",    format="Rs%.2f"),
+                "Chg":    st.column_config.NumberColumn("Chg",    format="%.2f"),
+                "Chg%":   st.column_config.NumberColumn("Chg%",   format="%.2f%%"),
+                "52W%":   st.column_config.NumberColumn("52W%",   format="%.1f%%"),
+                "21MA%":  st.column_config.NumberColumn("21MA%",  format="%.1f%%"),
+                "YoY%":   st.column_config.NumberColumn("YoY%",   format="%.1f%%"),
+                "F.Score":st.column_config.ProgressColumn("Score",min_value=0,max_value=100),
+            })
 
-# -- TAB 3: Full Results -------------------------------------------------------
-with tab_all:
-    st.markdown('<div class="sec-lbl">📋 Complete Scan Results</div>', unsafe_allow_html=True)
-
-    sort_opts = {
-        "Fund Score ↓":      ("fs",      True),
-        "YoY EPS% ↓":        ("yoy",     True),
-        "Dist 52W High ↓":   ("dH",      True),
-        "RS Leader first":   ("rs_leader",True),
-        "⭐ Perfect first":  ("perfect", True),
-        "Price ↓":           ("price",   True),
-        "Symbol A→Z":        ("sym",     False),
-    }
-    sort_sel = st.selectbox("Sort by:", list(sort_opts.keys()), index=0)
-    sort_key, sort_rev = sort_opts[sort_sel]
-
-    display = sorted(frows, key=lambda x: (x.get(sort_key) or 0), reverse=sort_rev)
-
-    # Build display DataFrame
-    df_disp = pd.DataFrame([{
-        "Symbol":       r.get("sym",""),
-        "Exchange":     r.get("exch",""),
-        "Sector":       r.get("sector",""),
-        "Price ₹":      r.get("price",0),
-        f"Stk{rs_days}d%": r.get("sp",0),
-        f"Sec{rs_days}d%": r.get("xp",0),
-        "Dist 52W%":    r.get("dH",0),
-        "21MA Dist%":   r.get("dS",0),
-        "RSI":          r.get("rsi","—"),
-        "EPS TTM ₹":    r.get("ttm","—"),
-        "P/E":          r.get("pe","—"),
-        "YoY EPS%":     r.get("yoy","—"),
-        "RS Leader":    "✅" if r.get("rs_leader") else "—",
-        "Buy Zone":     "🎯" if r.get("in_bz")     else "—",
-        "EPS Accel":    "📈" if r.get("ac_ok")     else "—",
-        "Beat Est":     "🎯" if r.get("sr_ok")     else "—",
-        "Sales+EPS":    "🏆" if r.get("sq_ok")     else "—",
-        "Fund Score":   r.get("fs",0),
-        "⭐ Perfect":   "⭐" if r.get("perfect")   else "—",
-    } for r in display])
-
-    st.dataframe(
-        df_disp,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Price ₹":    st.column_config.NumberColumn(format="₹%.2f"),
-            "EPS TTM ₹":  st.column_config.NumberColumn(format="₹%.1f"),
-            "Fund Score":  st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d"),
-            f"Stk{rs_days}d%": st.column_config.NumberColumn(format="%.2f%%"),
-            f"Sec{rs_days}d%": st.column_config.NumberColumn(format="%.2f%%"),
-            "Dist 52W%":  st.column_config.NumberColumn(format="%.2f%%"),
-            "21MA Dist%": st.column_config.NumberColumn(format="%.2f%%"),
-        }
-    )
-
-# -- TAB 4: Charts -------------------------------------------------------------
+# ---- TAB 3: Charts ----
 with tab_charts:
-    if not frows:
+    if not results:
         st.info("Run a scan to see charts.")
     else:
-        cc1, cc2 = st.columns(2)
-        with cc1:
-            st.plotly_chart(chart_rs_scatter(frows, rs_days),
-                            use_container_width=True, key="ch_rs")
+        cc1,cc2=st.columns(2)
+        with cc1: st.plotly_chart(chart_rs(results,rs_days),use_container_width=True,key="ch_rs")
         with cc2:
-            st.plotly_chart(chart_fund_bar(frows),
-                            use_container_width=True, key="ch_fund")
+            top20=sorted(results,key=lambda x:x.get("fs",0))[-20:]
+            ff=go.Figure(go.Bar(
+                y=[f"{r['sym']}[{r.get('exch','?')[0]}]" for r in top20],
+                x=[r.get("fs",0) for r in top20],orientation="h",
+                marker_color=[_AMB if r.get("perfect") else _SAGE if r.get("fs",0)>=60 else _SKY for r in top20],
+                marker_line_color="transparent"))
+            lf=_lay("Fund Score Top 20",h=380); lf["xaxis"]["range"]=[0,112]
+            ff.update_layout(**lf)
+            st.plotly_chart(ff,use_container_width=True,key="ch_fund")
 
-        cc3, cc4 = st.columns(2)
-        with cc3:
-            st.plotly_chart(chart_pe_scatter(frows),
-                            use_container_width=True, key="ch_pe")
-        with cc4:
-            st.plotly_chart(chart_52w_bar(frows),
-                            use_container_width=True, key="ch_52w")
-
-# -- TAB 5: Export -------------------------------------------------------------
-with tab_exp:
-    st.markdown('<div class="sec-lbl">💾 Export Results</div>', unsafe_allow_html=True)
-
-    def make_csv(rows: list) -> bytes:
-        cols = ["sym","name","exch","sector","price","high","dH","sp","xp",
-                "rs_leader","sma","dS","in_bz","rsi","ttm","pe","yoy",
-                "eps_ok","yoy_ok","ac_ok","sr_ok","sq_ok","fs","perfect"]
-        df = pd.DataFrame([{c: r.get(c) for c in cols} for r in rows])
-        return df.to_csv(index=False).encode("utf-8")
-
-    ec1, ec2, ec3, ec4, ec5 = st.columns(5)
-    with ec1:
-        st.download_button("⬇️ Full CSV",       make_csv(frows),
-                           f"full_{datetime.date.today()}.csv", "text/csv")
-    with ec2:
-        st.download_button("⭐ Perfect CSV",    make_csv(perfects),
-                           f"perfect_{datetime.date.today()}.csv", "text/csv",
-                           disabled=not perfects)
-    with ec3:
-        st.download_button("✅ RS Leaders CSV", make_csv(rs_leaders),
-                           f"rs_{datetime.date.today()}.csv", "text/csv",
-                           disabled=not rs_leaders)
-    with ec4:
-        nse_rows = [r for r in frows if r.get("exch") == "NSE"]
-        st.download_button("NSE Only CSV",     make_csv(nse_rows),
-                           f"nse_{datetime.date.today()}.csv", "text/csv",
-                           disabled=not nse_rows)
-    with ec5:
-        bse_rows = [r for r in frows if r.get("exch") == "BSE"]
-        st.download_button("BSE Only CSV",     make_csv(bse_rows),
-                           f"bse_{datetime.date.today()}.csv", "text/csv",
-                           disabled=not bse_rows)
-
-    st.markdown('<div class="sec-lbl">⚙️ Scan Config Used</div>', unsafe_allow_html=True)
-    st.json(cfg)
-
-# -- Footer --------------------------------------------------------------------
-# ---- TAB: Database ----------------------------------------------------------
-with tab_db:
-    st.markdown('<div class="sec-lbl">🗄️ Stock Universe Database</div>',
-                unsafe_allow_html=True)
-    _dc = db_count()
-
-    ds1, ds2, ds3, ds4 = st.columns(4)
-    ds1.metric("Total",  f"{_dc['total']:,}")
-    ds2.metric("NSE",    f"{_dc['nse']:,}")
-    ds3.metric("BSE",    f"{_dc['bse']:,}")
-    ds4.metric("Target", f"{len(NSE_ALL)+len(BSE_ALL):,} symbols")
-
-    if _dc["total"] > 0:
-        _dp = min(_dc["total"] / max(len(NSE_ALL)+len(BSE_ALL), 1) * 100, 100)
-        st.progress(_dp / 100)
-        st.caption(f"{_dp:.1f}% of target universe downloaded  "
-                   f"({_dc['total']:,} / {len(NSE_ALL)+len(BSE_ALL):,} symbols)")
-    else:
-        st.info("Database is empty. Use the buttons below to download stocks.")
+# ---- TAB 4: Instrument DB ----
+with tab_inst:
+    st.markdown('<div class="sec-lbl">Full Instrument Database</div>',unsafe_allow_html=True)
+    _dc2=db_count()
+    ia,ib,ic,id_=st.columns(4)
+    ia.metric("Total",  f"{_dc2['total']:,}")
+    ib.metric("NSE",    f"{_dc2['nse']:,}")
+    ic.metric("BSE",    f"{_dc2['bse']:,}")
+    id_.metric("Target","~8,000")
+    if _dc2["total"]>0:
+        st.progress(min(_dc2["total"]/8000,1.0))
+        st.caption(f"{_dc2['total']:,} instruments stored  |  {_dc2['total']/80:.1f}% of ~8K target")
 
     st.divider()
-
-    # Download / clear controls
-    dbc1, dbc2, dbc3 = st.columns([2, 2, 1])
-    _tok_db = st.session_state.get("token_input","")
-    with dbc1:
-        if st.button("⬇️ Download Next Batch (50+50)",
-                     use_container_width=True, key="dbt_next",
-                     disabled=st.session_state.get("dl_running", False),
-                     help="Fetches one batch of 50 NSE + 50 BSE, adds to DB"):
-            if not _tok_db:
-                st.error("Paste & verify token in sidebar first")
+    idc1,idc2,idc3=st.columns([2,2,1])
+    with idc1:
+        if st.button("Download Full List",use_container_width=True,key="inst_dl",
+                     disabled=st.session_state.get("dl_running",False)):
+            if not st.session_state.get("token_input",""):
+                st.error("Verify token first")
             else:
-                st.session_state.dl_running = True
-                st.session_state.dl_msg     = "Starting…"
-                st.session_state.dl_error   = ""
-                st.rerun()
-    with dbc2:
-        if st.button("⬇️ Download ALL (~1000 symbols)",
-                     use_container_width=True, key="dbt_all",
-                     disabled=st.session_state.get("dl_running", False)):
-            if not _tok_db:
-                st.error("Paste & verify token first")
-            else:
-                st.session_state.dl_running = True
-                st.session_state.dl_msg     = "Starting full download…"
-                st.session_state.dl_error   = ""
-                st.rerun()
-    with dbc3:
-        if st.button("🗑 Clear DB", use_container_width=True, key="dbt_clear"):
-            if DB_PATH.exists():
-                DB_PATH.unlink()
-            load_universe_cache.clear()
-            st.success("DB cleared")
-            st.rerun()
-
-    if st.session_state.get("dl_running"):
-        st.info(f"⏳ {st.session_state.get('dl_msg','Downloading…')}")
+                st.session_state.dl_running=True; st.session_state.dl_msg="Starting..."
+                st.session_state.dl_error=""; st.rerun()
+    with idc2:
+        if st.button("Sync / Update DB",use_container_width=True,key="inst_sync",
+                     disabled=st.session_state.get("dl_running",False)):
+            if st.session_state.get("token_input",""):
+                st.session_state.dl_running=True; st.rerun()
+    with idc3:
+        if st.button("Clear DB",use_container_width=True,key="inst_clr"):
+            if DB_PATH.exists(): DB_PATH.unlink()
+            load_universe.clear(); st.rerun()
 
     if st.session_state.get("dl_error"):
-        with st.expander("⚠️ Download errors"):
+        with st.expander("Download Errors",expanded=True):
             st.code(st.session_state.dl_error)
 
     st.divider()
 
-    # Table of all instruments in DB
-    if _dc["total"] > 0:
-        fc1, fc2, fc3 = st.columns([2, 2, 1])
-        with fc1:
-            _db_q = st.text_input("Search", placeholder="INFY or Infosys", key="db_q")
-        with fc2:
-            _db_ex = st.selectbox("Exchange", ["All","NSE","BSE"], key="db_ex")
-        with fc3:
-            _db_sort = st.selectbox("Sort", ["sym","name","exch"], key="db_sort")
+    if _dc2["total"]==0:
+        st.warning("Database empty. Click 'Download Full List' above (requires valid token).")
+    else:
+        fi1,fi2,fi3,fi4=st.columns([3,2,2,1])
+        with fi1: q_i=st.text_input("Search",key="inst_q",placeholder="INFY or Infosys")
+        with fi2: ex_i=st.selectbox("Exchange",["All","NSE","BSE"],key="inst_ex")
+        with fi3: tp_i=st.selectbox("Type",["All","EQUITY","EQ","FUT","OPT","ETF","INDEX"],key="inst_tp")
+        with fi4: pg_i=st.number_input("Page",min_value=1,value=1,key="inst_pg")
 
-        _all_db = db_load_all()
-        if _db_q:
-            _q = _db_q.upper()
-            _all_db = [r for r in _all_db
-                       if _q in r.get("sym","").upper() or _q in r.get("name","").upper()]
-        if _db_ex != "All":
-            _all_db = [r for r in _all_db if r.get("exch") == _db_ex]
-        _all_db.sort(key=lambda r: r.get(_db_sort,""))
+        all_i=db_load_all(exch=None if ex_i=="All" else ex_i,limit=None,page=1,per=100000)
+        if q_i:
+            q2=q_i.upper()
+            all_i=[r for r in all_i if q2 in r.get("sym","").upper() or q2 in r.get("name","").upper()]
+        if tp_i!="All":
+            all_i=[r for r in all_i if (r.get("inst_type","") or "").upper()==tp_i]
 
-        st.caption(f"Showing {len(_all_db):,} stocks")
+        total_f=len(all_i); PER=500
+        page_items=all_i[(pg_i-1)*PER:pg_i*PER]
+        st.caption(f"Showing {len(page_items):,} of {total_f:,}  |  Page {pg_i}/{max(1,(total_f+PER-1)//PER)}")
 
-        _df_db = pd.DataFrame([{
-            "Symbol":   r.get("sym",""),
-            "Name":     r.get("name",""),
-            "Exchange": r.get("exch",""),
-            "Sector":   r.get("sector","").replace("NSE_INDEX|Nifty ","").replace("BSE_INDEX|S&P BSE ",""),
-            "ISIN":     r.get("isin",""),
-            "Key":      r.get("ikey",""),
-        } for r in _all_db])
+        df_i=pd.DataFrame([{
+            "Symbol":  r.get("sym",""),      "Name":    r.get("name",""),
+            "Exchange":r.get("exch",""),     "Segment": r.get("segment",""),
+            "Type":    r.get("inst_type",""),"Lot":     r.get("lot_size",""),
+            "Tick":    r.get("tick_size",""),"ISIN":    r.get("isin",""),
+            "Sector":  r.get("sector","").replace("NSE_INDEX|Nifty ","").replace("BSE_INDEX|S&P BSE ",""),
+            "Key":     r.get("ikey",""),
+        } for r in page_items])
 
-        st.dataframe(
-            _df_db, use_container_width=True, hide_index=True,
+        st.dataframe(df_i,use_container_width=True,hide_index=True,
             column_config={
-                "Symbol":   st.column_config.TextColumn(width="small"),
-                "Name":     st.column_config.TextColumn(width="medium"),
-                "Exchange": st.column_config.TextColumn(width="small"),
-                "Sector":   st.column_config.TextColumn(width="medium"),
-                "ISIN":     st.column_config.TextColumn(width="medium"),
-                "Key":      st.column_config.TextColumn(width="large"),
-            }
-        )
+                "Symbol":  st.column_config.TextColumn(width="small"),
+                "Name":    st.column_config.TextColumn(width="medium"),
+                "Exchange":st.column_config.TextColumn(width="small"),
+                "Type":    st.column_config.TextColumn(width="small"),
+                "Sector":  st.column_config.TextColumn(width="medium"),
+                "Key":     st.column_config.TextColumn(width="large"),
+            })
 
-        # Auto-save snapshot
-        if st.button("💾 Save snapshot to universe_snapshot.json", key="db_snap"):
-            _snap = {"saved": datetime.datetime.now().isoformat(),
-                     "total": len(_all_db), "instruments": _all_db}
-            Path("universe_snapshot.json").write_text(
-                json.dumps(_snap, separators=(",",":"), ensure_ascii=False)
-            )
-            st.success(f"Saved {len(_all_db):,} stocks to universe_snapshot.json")
+        if st.button("Save Snapshot to JSON",key="inst_snap"):
+            snap={"saved":datetime.datetime.now().isoformat(),"total":total_f,"instruments":all_i}
+            Path("universe_snapshot.json").write_text(json.dumps(snap,separators=(",",":"),ensure_ascii=False))
+            st.success(f"Saved {total_f:,} instruments")
 
-st.markdown(
-    f'<p style="font-family:JetBrains Mono,monospace;font-size:.58rem;color:#252a3a;'
-    f'text-align:right;margin-top:32px;">'
-    f'NSE+BSE Multibagger Screener · Upstox V2 · Streamlit v5.0 · '
-    f'{datetime.date.today()}</p>',
-    unsafe_allow_html=True
-)
+# ---- TAB 5: Export ----
+with tab_exp:
+    st.markdown('<div class="sec-lbl">Export</div>',unsafe_allow_html=True)
+    if not results:
+        st.info("Run a scan first.")
+    else:
+        def _csv(rows):
+            cols=["sym","name","exch","sector","price","high52","dH","sp","xp",
+                  "rs_leader","sma21","dS","in_bz","rsi","atr","ttm","pe","yoy",
+                  "eps_ok","yoy_ok","ac_ok","sr_ok","sq_ok","fs","perfect"]
+            return pd.DataFrame([{c:r.get(c) for c in cols} for r in rows]).to_csv(index=False).encode()
+        ec1,ec2,ec3,ec4=st.columns(4)
+        with ec1: st.download_button("All Results",_csv(results),f"scan_{datetime.date.today()}.csv","text/csv")
+        with ec2:
+            pf=[r for r in results if r.get("perfect")]
+            st.download_button("Perfect Only",_csv(pf),f"perfect_{datetime.date.today()}.csv","text/csv",disabled=not pf)
+        with ec3:
+            nr=[r for r in results if r.get("exch")=="NSE"]
+            st.download_button("NSE Only",_csv(nr),f"nse_{datetime.date.today()}.csv","text/csv",disabled=not nr)
+        with ec4:
+            br=[r for r in results if r.get("exch")=="BSE"]
+            st.download_button("BSE Only",_csv(br),f"bse_{datetime.date.today()}.csv","text/csv",disabled=not br)
+        st.divider()
+        st.markdown('<div class="sec-lbl">Scan Config</div>',unsafe_allow_html=True)
+        st.json(cfg)
