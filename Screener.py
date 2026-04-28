@@ -246,7 +246,14 @@ div[data-testid="stError"]   { background: rgba(240,112,112,.07) !important; bor
 #  CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 UPSTOX_BASE    = "https://api.upstox.com/v2"
-INSTRUMENT_URL = "https://assets.upstox.com/market-assets/instruments/exchange/complete.csv.gz"
+# Upstox instrument master — multiple sources tried in order
+INSTRUMENT_URLS = [
+    # Source 1: Upstox CDN (requires Accept header, may need auth)
+    "https://assets.upstox.com/market-assets/instruments/exchange/complete.csv.gz",
+    # Source 2: Upstox alternate CDN path
+    "https://assets.upstox.com/market-assets/instruments/v2/exchange/complete.json.gz",
+]
+INSTRUMENT_URL = INSTRUMENT_URLS[0]   # kept for backward compat
 UNIVERSE_CACHE = Path("universe_cache.json")
 FUND_DATA_PATH = Path("fundamentals.json")
 QUOTE_BATCH    = 200
@@ -805,6 +812,98 @@ def _save_merged_cache(uni: list):
     UNIVERSE_CACHE.write_text(json.dumps(payload, separators=(",", ":")))
 
 
+def _fetch_via_upstox_api(token: str, progress_cb=None) -> list | None:
+    """
+    Fetch all instruments via the official Upstox V2 API.
+    GET /v2/instruments?exchange=NSE_EQ  (and BSE_EQ)
+    Returns a list of instrument dicts, or None on failure.
+
+    The API returns JSON — no gzip, no auth issues with CDN.
+    This is the officially supported, token-authenticated route.
+    """
+    all_instruments = []
+    exchanges       = ["NSE_EQ", "BSE_EQ"]
+    hdrs            = {"Authorization": f"Bearer {token}",
+                       "Accept": "application/json"}
+
+    for exch in exchanges:
+        url = f"{UPSTOX_BASE}/instruments"
+        params = {"exchange": exch}
+        try:
+            if progress_cb:
+                progress_cb(0.30, f"API: fetching {exch} instruments…")
+            r = requests.get(url, headers=hdrs, params=params, timeout=60)
+            if r.status_code == 401:
+                if progress_cb:
+                    progress_cb(0.30, "⚠️ Token invalid or expired for /instruments API")
+                return None
+            if r.status_code == 404:
+                # Endpoint might be paginated differently — try alternate path
+                r2 = requests.get(
+                    f"{UPSTOX_BASE}/market-quote/instruments",
+                    headers=hdrs, params={"exchange": exch}, timeout=60
+                )
+                if r2.status_code == 200:
+                    r = r2
+                else:
+                    if progress_cb:
+                        progress_cb(0.30, f"⚠️ /instruments 404 for {exch}, skipping")
+                    continue
+            if r.status_code != 200:
+                if progress_cb:
+                    progress_cb(0.30,
+                        f"⚠️ {exch}: HTTP {r.status_code} — {r.text[:80]}")
+                continue
+
+            data = r.json()
+            # API may return {"data": [...]} or just [...]
+            instruments = (data.get("data") or data) if isinstance(data, dict) else data
+            if isinstance(instruments, list):
+                all_instruments.extend(instruments)
+                if progress_cb:
+                    progress_cb(0.45,
+                        f"✅ {exch}: {len(instruments):,} instruments "
+                        f"(total so far: {len(all_instruments):,})")
+        except Exception as e:
+            if progress_cb:
+                progress_cb(0.30, f"⚠️ API error for {exch}: {e}")
+            continue
+
+    return all_instruments if all_instruments else None
+
+
+def _fetch_via_upstox_search_api(token: str, progress_cb=None) -> list | None:
+    """
+    Alternative: use Upstox instrument search endpoint to get stocks
+    in alphabetical batches. Slower but works with older API versions.
+    """
+    all_instruments = []
+    hdrs = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    # Fetch by first letter A-Z + 0-9
+    chars = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    for i, ch in enumerate(chars):
+        try:
+            if progress_cb:
+                pct = 0.30 + (i / len(chars)) * 0.30
+                progress_cb(pct, f"Search API: fetching stocks starting with '{ch}'…")
+            r = requests.get(
+                f"{UPSTOX_BASE}/instruments/search",
+                headers=hdrs,
+                params={"query": ch, "exchange": "NSE,BSE",
+                        "instrument_type": "EQ", "page": 1, "page_size": 500},
+                timeout=15
+            )
+            if r.status_code in (200, 201):
+                data  = r.json()
+                items = data.get("data", data) if isinstance(data, dict) else data
+                if isinstance(items, list):
+                    all_instruments.extend(items)
+        except Exception:
+            pass
+        time.sleep(0.15)
+    return all_instruments if all_instruments else None
+
+
 def download_all_stocks_sync(progress_cb=None) -> dict:
     """
     Download the full Upstox instrument master (~8000 equity stocks) and
@@ -849,43 +948,141 @@ def download_all_stocks_sync(progress_cb=None) -> dict:
         progress_cb(0.20,
             f"✅ Sector maps done ({len(isin_sector):,} ISINs) — streaming instrument master…")
 
-    # ── Step 2: Stream-download gzip in 64 KB chunks ─────────────────────
+    # ── Step 2: Fetch instrument master — try multiple strategies ───────────
     raw_chunks: list[bytes] = []
-    downloaded = 0
-    try:
-        with requests.get(INSTRUMENT_URL, stream=True, timeout=120) as resp:
-            resp.raise_for_status()
-            total_bytes = int(resp.headers.get("Content-Length", 0))
-            for chunk in resp.iter_content(chunk_size=65536):
-                if chunk:
-                    raw_chunks.append(chunk)
-                    downloaded += len(chunk)
-                    if progress_cb and total_bytes > 0:
-                        dl_pct = 0.20 + (downloaded / total_bytes) * 0.40
-                        progress_cb(dl_pct,
-                            f"Downloading… {downloaded//1024:,} KB "
-                            f"/ {total_bytes//1024:,} KB")
-    except Exception as e:
-        assembled = _assemble_batches()
+
+    def _try_download(url: str, extra_hdrs: dict) -> tuple[bool, str]:
+        """Returns (success, error_msg). Populates raw_chunks on success."""
+        nonlocal raw_chunks
+        raw_chunks = []
+        downloaded = 0
+        try:
+            h = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) "
+                              "Chrome/124.0.0.0 Safari/537.36",
+                "Accept":          "application/octet-stream, application/gzip, */*",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer":         "https://upstox.com/",
+                "Origin":          "https://upstox.com",
+                **extra_hdrs,
+            }
+            with requests.get(url, headers=h, stream=True,
+                              timeout=120, allow_redirects=True) as resp:
+                if resp.status_code == 403:
+                    return False, f"403 Forbidden — URL requires auth: {url}"
+                if resp.status_code == 401:
+                    return False, f"401 Unauthorized: {url}"
+                resp.raise_for_status()
+                total_bytes = int(resp.headers.get("Content-Length", 0))
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        raw_chunks.append(chunk)
+                        downloaded += len(chunk)
+                        if progress_cb and total_bytes > 0:
+                            dl_pct = 0.20 + (downloaded / total_bytes) * 0.40
+                            progress_cb(dl_pct,
+                                f"Downloading… {downloaded//1024:,} KB"
+                                f" / {total_bytes//1024:,} KB")
+            return True, ""
+        except Exception as exc:
+            return False, str(exc)
+
+    # Strategy 1: CDN with bearer token in header
+    token_from_state = st.session_state.get("token_input", "")
+    auth_hdr = {"Authorization": f"Bearer {token_from_state}"} if token_from_state else {}
+
+    strategies = [
+        # (label, url, extra_headers)
+        ("Upstox CDN + token",    INSTRUMENT_URLS[0], auth_hdr),
+        ("Upstox CDN no-auth",    INSTRUMENT_URLS[0], {}),
+        # Strategy 3: Use Upstox V2 API /instruments endpoint (paginated JSON)
+        # This is the officially supported programmatic path
+        ("Upstox API /instruments", "USE_API", auth_hdr),
+    ]
+
+    download_ok   = False
+    all_rows_json = None   # set when using API strategy
+
+    for label, url, extra in strategies:
+        if url == "USE_API":
+            if not token_from_state:
+                if progress_cb:
+                    progress_cb(0.25, "⚠️ No token — skipping API strategy")
+                continue
+            # Use Upstox GET /v2/instruments endpoint
+            if progress_cb:
+                progress_cb(0.25, f"Trying: {label}…")
+            all_rows_json = _fetch_via_upstox_api(token_from_state, progress_cb)
+            if all_rows_json is not None:
+                download_ok = True
+                if progress_cb:
+                    progress_cb(0.65,
+                        f"✅ {label}: {len(all_rows_json):,} instruments fetched")
+                break
+            continue
+
         if progress_cb:
-            progress_cb(0.20,
-                f"⚠️ Download error: {e}. "
-                f"Using {len(assembled) or len(DEFAULT_UNIVERSE):,} stocks from cache.")
-        return {"ok": False, "error": str(e),
-                "batches_written": _batch_status()["count"],
-                "total_stored":    _batch_status()["total_stocks"]}
+            progress_cb(0.22, f"Trying: {label}…")
+        ok, err = _try_download(url, extra)
+        if ok:
+            download_ok = True
+            if progress_cb:
+                progress_cb(0.60,
+                    f"✅ {label}: {sum(len(c) for c in raw_chunks)//1024:,} KB downloaded")
+            break
+        else:
+            if progress_cb:
+                progress_cb(0.22, f"  ↳ Failed ({err[:80]}) — trying next…")
+
+    if not download_ok:
+        assembled = _assemble_batches()
+        err_msg = (
+            "All download strategies failed. The Upstox instrument master URL requires "
+            "authentication or is geo-restricted.\n\n"
+            "**Alternative:** Use the Upstox Developer Console to download "
+            "instruments.json manually and place it as 'instruments.json' "
+            "in the same folder as this script — it will be detected automatically."
+        )
+        if progress_cb:
+            progress_cb(0.22, f"⚠️ All strategies failed. {len(assembled)} stocks from cache.")
+        # Check for manual instruments.json file
+        manual = Path("instruments.json")
+        if manual.exists():
+            if progress_cb:
+                progress_cb(0.30, "📁 Found manual instruments.json — parsing…")
+            try:
+                import json as _json
+                all_rows_json = _json.loads(manual.read_text())
+                download_ok   = True
+                if progress_cb:
+                    progress_cb(0.60, f"✅ Manual file: {len(all_rows_json):,} instruments")
+            except Exception as me:
+                err_msg += f"\nManual file parse error: {me}"
+        if not download_ok:
+            return {"ok": False, "error": err_msg,
+                    "batches_written": _batch_status()["count"],
+                    "total_stored":    _batch_status()["total_stocks"],
+                    "log": [err_msg]}
 
     if progress_cb:
-        progress_cb(0.60, "Download complete — parsing and writing batches…")
+        progress_cb(0.65, "Parsing instruments and writing batches…")
 
-    # ── Step 3: Parse CSV and write 500-stock batches ─────────────────────
-    try:
-        raw = b"".join(raw_chunks)
-        with gzip.open(io.BytesIO(raw), "rt", encoding="utf-8") as f:
-            all_rows = list(csv.DictReader(f))
-    except Exception as e:
-        return {"ok": False, "error": f"Parse error: {e}",
-                "batches_written": 0, "total_stored": 0}
+    # ── Step 3: Parse instruments and write 500-stock batches ───────────────
+    all_rows: list[dict] = []
+    if all_rows_json is not None:
+        # Came from API or manual JSON file — already a list of dicts
+        all_rows = all_rows_json
+    else:
+        # Came from gzip CSV download
+        try:
+            raw = b"".join(raw_chunks)
+            with gzip.open(io.BytesIO(raw), "rt", encoding="utf-8") as f:
+                all_rows = list(csv.DictReader(f))
+        except Exception as e:
+            return {"ok": False, "error": f"Parse error: {e}",
+                    "batches_written": 0, "total_stored": 0}
 
     BATCH_SIZE    = 500
     current_batch: list = []
@@ -909,12 +1106,19 @@ def download_all_stocks_sync(progress_cb=None) -> dict:
 
     new_added = 0
     for row in all_rows:
-        seg  = row.get("segment", "")
-        inst = row.get("instrument_type", "")
-        ikey = row.get("instrument_key", "")
+        # Support both CSV DictReader format and Upstox API JSON format
+        seg  = row.get("segment", row.get("exchange_segment", ""))
+        inst = row.get("instrument_type", row.get("type", ""))
+        ikey = row.get("instrument_key", row.get("key", ""))
         isin = row.get("isin", "")
-        sym  = row.get("trading_symbol", row.get("tradingsymbol", "")).upper().strip()
-        name = row.get("name", sym).strip()
+        sym  = row.get("trading_symbol", row.get("tradingsymbol",
+               row.get("symbol", ""))).upper().strip()
+        name = row.get("name", row.get("company_name", sym)).strip()
+
+        # Normalise segment values from API format
+        if seg in ("NSE", "NSE_EQ"):  seg = "NSE_EQ"
+        if seg in ("BSE", "BSE_EQ"):  seg = "BSE_EQ"
+        if inst in ("EQUITY", "EQ", "equity"):  inst = "EQUITY"
 
         if seg not in ("NSE_EQ", "BSE_EQ") or inst != "EQUITY":
             continue
@@ -1567,7 +1771,9 @@ with st.sidebar:
         st.caption(f"📦 {bs['count']} batches · {bs['total_stocks']:,} stocks on disk")
 
     if st.button("⬇️ Download All ~8000 Stocks", use_container_width=True,
-                 help="Downloads full NSE+BSE in 500-stock batches. Safe to interrupt."):
+                 help="Downloads ~8000 NSE+BSE stocks via Upstox API. "
+                      "Requires valid token. Or place an instruments.json file "
+                      "in the same folder to load manually."):
         bar_ph  = st.progress(0.0)
         prog_ph = st.empty()
         def _prog(pct, msg):
@@ -1590,6 +1796,10 @@ with st.sidebar:
             st.session_state.download_error = err_msg
             st.session_state.download_log   = result.get("log", [])
         st.rerun()
+
+    # Manual file hint
+    if Path("instruments.json").exists():
+        st.caption("📁 instruments.json found — will be used as fallback")
 
     if st.session_state.get("download_error"):
         st.warning(st.session_state.download_error)
@@ -1648,6 +1858,22 @@ with st.sidebar:
             st.warning("Paste your token first.")
 
     st.caption("① upstox.com/developer → Your App\n② OAuth2 flow → copy access_token\n③ Valid for 1 trading day")
+
+    with st.expander("📥 Manual instruments.json (if download fails)"):
+        st.markdown("""
+**If automatic download fails (403/401 error):**
+
+1. Log into [Upstox Developer Console](https://developer.upstox.com)
+2. Go to **API Docs** → **Instruments** → Download CSV/JSON
+3. Or run in terminal with your token:
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  "https://api.upstox.com/v2/instruments?exchange=NSE_EQ" \
+  -o instruments.json
+```
+4. Place `instruments.json` in the **same folder** as `screener_st.py`
+5. Click **⬇️ Download All ~8000 Stocks** — it will pick up the file automatically
+        """)
 
     st.divider()
 
