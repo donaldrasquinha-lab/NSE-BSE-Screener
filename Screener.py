@@ -377,103 +377,211 @@ def fetch_batch_ltp(keys: list, token: str) -> dict:
 # ===========================================================================
 
 # -- 500 NSE trading symbols --------------------------------------------------
-NSE_500 = [
-"TCS","INFY","WIPRO","HCLTECH","TECHM","LTIM","MPHASIS","COFORGE","PERSISTENT","KPIT",
-"LTTS","OFSS","TATAELXSI","CYIENT","BIRLASOFT","ZENSARTECH","INTELLECT","HAPPSTMNDS",
-"NEWGEN","TANLA","RATEGAIN","LATENTVIEW","ECLERX","MASTECH","SASKEN","RAMCOSYS",
-"HDFCBANK","ICICIBANK","KOTAKBANK","AXISBANK","SBIN","INDUSINDBK","BANDHANBNK",
-"FEDERALBNK","IDFCFIRSTB","AUBANK","RBLBANK","YESBANK","CANBK","BANKBARODA","PNB",
-"UNIONBANK","INDIANB","KARURVYSYA","DCBBANK","CSBBANK","SOUTHBANK","EQUITASBNK",
-"UJJIVANSFB","KARNATAKABK","TMKANSASBNK","LAKSHVILAS","JANDKBANK","CITYUNIONBK",
-"HINDUNILVR","ITC","NESTLEIND","BRITANNIA","DABUR","MARICO","GODREJCP","COLPAL",
-"EMAMILTD","TATACONSUM","JUBLFOODS","VBL","MCDOWELL-N","RADICO","PGHH","CCL",
-"BIKAJI","PATANJALI","PRATAAP","KRBL","HATSUN","DODLA","HERITAGE","UBL","UNITDSPR",
-"MARUTI","TATAMOTORS","M&M","BAJAJ-AUTO","EICHERMOT","HEROMOTOCO","ASHOKLEY",
-"MOTHERSON","TVSMOTOR","BHARATFORG","BALKRISIND","BOSCHLTD","EXIDEIND","CEATLTD",
-"SCHAEFFLER","SKFINDIA","WABCOINDIA","MINDAIND","SUPRAJIT","MRF","APOLLOTYRE",
-"JKTYRE","TIINDIA","ENDURANCE","CRAFTSMAN","LUMAXTECH","VARROC","ESCORTS","FORCE",
-"SUNPHARMA","DRREDDY","CIPLA","DIVISLAB","AUROPHARMA","TORNTPHARM","LUPIN","BIOCON",
-"ABBOTINDIA","ALKEM","IPCALAB","LALPATHLAB","METROPOLIS","MAXHEALTH","FORTIS",
-"APOLLOHOSP","SYNGENE","GLENMARK","AJANTPHARM","GRANULES","NATCOPHARM","PFIZER",
-"GLAXO","LAURUSLABS","ERIS","JUBLPHARMA","CAPLIPOINT","STRIDES","GLAND","FDC",
-"STAR","SUVENPHARM","DIVIS","SHILPAMED","MARKSANS","WINDLAS","WOCKPHARMA","IPCA",
-"RELIANCE","ONGC","IOC","BPCL","POWERGRID","NTPC","GAIL","PETRONET","HINDPETRO",
-"MRPL","GUJARATGAS","IGL","MGL","ADANIPORTS","TATAPOWER","TORNTPOWER","NHPC",
-"SJVN","SUZLON","INOXWIND","ADANIGREEN","ADANIPOWER","CESC","RECLTD","PFC","IREDA",
-"TATASTEEL","HINDALCO","JSWSTEEL","SAIL","NMDC","VEDL","NATIONALUM","APLAPOLLO",
-"WELSPUNIND","JINDALSTEL","RATNAMANI","MOIL","COALINDIA","HINDCOPPER","MANDHATU",
-"BAJFINANCE","BAJAJFINSV","CHOLAFIN","MUTHOOTFIN","MANAPPURAM","LICHOUSING",
-"PNBHOUSING","CANFINHOME","REPCO","M&MFIN","SHRIRAMFIN","IIFL","CREDITACC",
-"HDFCLIFE","SBILIFE","ICICIGI","ICICILOPRU","STARHEALTH","NIACL","ICICIGI",
-"BHARTIARTL","IDEA","TATACOMM","HFCL","STLTECH","VINDHYATEL","TEJAS",
-"ULTRACEMCO","SHREECEM","AMBUJACEM","ACCLTD","DALMIACEM","JKCEMENT","RAMCOCEM",
-"HEIDELBERG","BIRLACORPN","INDIACEM","KESORAMIND","NCLTIND","PRICOL","PRISMJOHS",
-"SIEMENS","ABB","BHEL","CUMMINS","THERMAX","KEC","KALPATPOWR","GRINDWELL",
-"CGPOWER","ELECON","AIA","TIMKEN","KAYNES","DIXON","AMBER","HAVELLS","VOLTAS",
-"BLUESTAR","CROMPTON","VGUARD","ORIENTELEC","WHIRLPOOL","SYMPHONY","TTKHLTCR",
-"DLF","LODHA","GODREJPROP","PRESTIGE","OBEROIRLTY","PHOENIXLTD","BRIGADE",
-"SOBHA","KOLTEPATIL","PURVA","SUNTECK","ELDECO","NESCO","MAHINDCIE",
-"HAL","BEL","COCHINSHIP","MAZDOCK","DATAPATTNS","MTAR","PARAS","BEML","GRSE",
-"MIDHANI","WALCHNDNAGR","DYNAMATECH","BDL","BHARAT",
-"DMART","TRENTLTD","NYKAA","ZOMATO","PAGEIND","KAJARIACER","CENTURYPLY",
-"TITAN","KALYANKJIL","RAJESHEXPO","ABFRL","MANYAVAR","VEDANT","CAMPUS",
-"INDIGO","LEMONTRE","CHALET","EIH","TAJGVK","ORIENTHOTEL","WONDERLA",
-"PVR","INOXLEISUR","SUNTV","ZEEL","NDTV","DISHTV",
-"IRCTC","IRFC","RVNL","RITES","IRCON","NBCC","HUDCO",
-"SRF","DEEPAKNTR","NAVINFLUOR","AARTIIND","VINATIORGA","TATACHEM","CHAMBLFERT",
-"COROMANDEL","PIIND","GHCL","DEEPAKFERT","GNFC","GSFC","NFL","RCF","NEOGEN",
-"ALKYL","SUDARSCHEM","FINEORG","NOCIL","GALAXY","ANUPAM","VALIANT","CAMS",
-"PIDILITIND","ASIANPAINT","BERGEPAINT","KANSAINER","LAXMIMETAL","PRINCEPIPE",
-"APOLLOPIPE","FINOLEX","ASTRAL","SUPREMEIND","NILKAMAL","KAPLAM","TIME",
-"CONCOR","DELHIVERY","BLUEDART","GATI","TCI","ALLCARGO","MAHINDLOG",
-"BIOCON","GLAND","DIVIS","SUNPHARMA","DRREDDY",
-"ADANIENT","ADANIPORTS","ADANIGREEN","ADANIPOWER","ADANIGAS","ADANITRANS",
-"LT","LARSENTOUBRO","LTFIN","LTTECHNO","LTTS","LTIM",
-"TATAMOTORS","TATACONSUM","TATACHEM","TATASTEEL","TATAPOWER","TATAELXSI",
-"RELIANCE","JSWSTEEL","JSWENERGY","JSWAL","JSWINFRA",
+NSE_ALL = [  # ~900 NSE equity symbols — resolved 50 at a time via Upstox API
+    "5PAISA", "AAPL", "AARTIDRUG", "AARTIIND", "AARTIINDU", "AARTISURF", "AAVAS", "ABAN", "ABB", "ABBOTINDIA",
+    "ABCAPITAL", "ABFRL", "ABMINTLEXP", "ACC", "ACCELYA", "ACCLTD", "ACMESOLAR", "ADANIENT", "ADANIGAS", "ADANIGREEN",
+    "ADANIPORTS", "ADANIPOWER", "ADANITRANS", "ADFFOODS", "ADHUNIK", "ADORWELD", "ADROITINDU", "ADVANCE", "AEGIS", "AEGISCHEM",
+    "AFCONS", "AFFLE", "AGEL", "AGI", "AGRITECH", "AGROTECH", "AHMEDABADSE", "AIA", "AIAENG", "AJANTPHARM",
+    "AJMERA", "AKZO", "AKZOINDIA", "ALEMBICLTD", "ALEMBICPHARM", "ALEXIONPHAR", "ALICON", "ALIVUS", "ALKEM", "ALKYL",
+    "ALKYLAMINE", "ALLCARGO", "ALOKIND", "ALPA", "ALPHAGEO", "ALSTOMIND", "AMARAJABAT", "AMBER", "AMBIKA", "AMBIKCO",
+    "AMBUJACEM", "AMFORGE", "AMJUMBOSEC", "AMRUTANJAN", "ANANDRATHI", "ANANTRAJ", "ANDHRABANK", "ANDHRACEMENT", "ANDHRSUGAR", "ANGELONE",
+    "ANIKINDSPIN", "ANKITMETAL", "ANMOLCHEM", "ANSAL", "ANTHEM", "ANUP", "ANUPAM", "APARINDS", "APEX", "APEXFROZEN",
+    "APLAPOLLO", "APOLLOHOSP", "APOLLOPIPE", "APOLLOTYRE", "APTUS", "ARCHIES", "ARCIL", "ARENTER", "ARFIN", "ARIHANT",
+    "ARJANCAP", "ARKADE", "ARMAN", "ARMANFIN", "ARNAV", "ARROW", "ARSHIYA", "ARTEDZ", "ARVIND", "ARVINDFASN",
+    "ARVSMART", "ASAHI", "ASALCBR", "ASHIANA", "ASHOKLEY", "ASIANHOTELSSE", "ASIANPAINT", "ASIANTILES", "ASTEC", "ASTERDM",
+    "ASTRA", "ASTRAL", "ASTRALMIND", "ATFL", "ATGL", "ATMASTCO", "AUBANK", "AURIONPRO", "AUROBINDO", "AUROPHARMA",
+    "AURUM", "AUTOAXLES", "AUTOLINE", "AUTOMOTIVEAxle", "AUTOSTRUT", "AVALON", "AVATARFIN", "AVENUE", "AVENUES", "AVONMORE",
+    "AVRO", "AWFIS", "AWL", "AXISBANK", "AXISCADES", "AYMSYNTEX", "BAJAJ-AUTO", "BAJAJFINSV", "BAJFINANCE", "BALAJI",
+    "BALAJITELE", "BALKRISIND", "BANDHANBNK", "BANKBARODA", "BANKINDIA", "BANKOFMAH", "BARBEQUE", "BATAIND", "BAYER", "BCCL",
+    "BDL", "BEL", "BEML", "BERGEPAINT", "BHARAT", "BHARATFORG", "BHARTIARTL", "BHEL", "BHIMJYOTI", "BIKAJI",
+    "BIOCON", "BIRLACORPN", "BIRLASOFT", "BLISSGVS", "BLUEDART", "BLUESTAR", "BOLLYCOM", "BOMBAY", "BOMDYEING", "BOSCHLTD",
+    "BPCL", "BRAINBEEES", "BRIGADE", "BRITANNIA", "BSNL", "BUILDCON", "BURGERKING", "BURNPUR", "CALYPSO", "CAMLIN",
+    "CAMPUS", "CAMS", "CANBK", "CANFINHOME", "CANTABIL", "CAPITALSFB", "CAPLIPOINT", "CARGOTRANS", "CARTRADE", "CCL",
+    "CEATLTD", "CENTRALBANK", "CENTURYPLY", "CENTURYREAL", "CESC", "CGPOWER", "CHALET", "CHAMBLFERT", "CHEMPLAST", "CHENNPETRO",
+    "CHOLAFIN", "CHOLAFINC", "CIGNITI", "CIPLA", "CLEAN", "COALINDIA", "COCHINSHIP", "COCKENERGY", "COFORGE", "COLPAL",
+    "CONCOR", "COROMANDEL", "CORPBANK", "COX", "CPCB", "CRAFTSMAN", "CREDITACC", "CROMPTON", "CSBBANK", "CUMMINS",
+    "CYIENT", "DABUR", "DALMIACEM", "DATAINFOSYS", "DATAMATICS", "DATAPATTNS", "DBCORP", "DCBBANK", "DCWLTD", "DECCANCEM",
+    "DEEPAKFERT", "DEEPAKNTR", "DEEPIND", "DELHIVERY", "DEN", "DENABANK", "DEVYANI", "DHANUKA", "DHARIVIT", "DIGISPICE",
+    "DISH", "DISHTV", "DIVI", "DIVISLAB", "DIXON", "DLF", "DMART", "DMCC", "DODLA", "DOLLAR",
+    "DONEAR", "DRREDDY", "DTDC", "DYNAMATECH", "EASEMYTRIP", "ECLERX", "EICHERMOT", "EIH", "EIHOTEL", "ELDECO",
+    "ELECON", "ELECTHERM", "ELGIEQUIP", "EMAAR", "ENDURANCE", "EPIGRAL", "EQUITASBNK", "ERIS", "EROS", "ESAFSFB",
+    "ESCORTS", "EXIDEIND", "FDC", "FEDERALBNK", "FENOPLAST", "FERMENTA", "FHHOTEL", "FINEORG", "FIVE100", "FORCE",
+    "FORTIS", "FRESHWORKS", "FRETAIL", "FSL", "FUSION", "GABRIEL", "GAIL", "GALAXY", "GALLANTT", "GARWARE",
+    "GATI", "GE", "GENESYS", "GHCL", "GICRE", "GIPCL", "GLAND", "GLAXO", "GLENMARK", "GMM",
+    "GMRINFRA", "GNFC", "GODAVARI", "GODREJCP", "GODREJPROP", "GOLDI", "GONTERMANN", "GPPL", "GRANULES", "GRASIM",
+    "GREENKO", "GREENPLY", "GRINDWELL", "GRSE", "GSFC", "GTPL", "GUJARATGAS", "GUJGASLTD", "GULSHAN", "HAL",
+    "HAPPSTMNDS", "HATSUN", "HAVELLS", "HBL", "HCC", "HCLINFOSYS", "HCLTECH", "HDFC", "HDFCAMC", "HDFCBANK",
+    "HDFCLIFE", "HEALTHVISTA", "HEIDELBERG", "HERITAGE", "HEROMOTOCO", "HESTER", "HEXAWARE", "HFCL", "HINDALCO", "HINDCOPPER",
+    "HINDOILEXP", "HINDPETRO", "HINDUNILVR", "HINDUSANDP", "HINDUSTAN", "HINDWARE", "HOMEFIRST", "HOTSTAR", "HPCL", "HTMEDIA",
+    "HUDCO", "IBREALEST", "IBULHSGFIN", "ICICIBANK", "ICICIGI", "ICICILOPRU", "IDEA", "IDEAFORGE", "IDFC", "IDFCFIRSTB",
+    "IFFCO", "IGL", "IIFL", "IIFLWAM", "IMAGICAA", "INDGRID", "INDHOTEL", "INDIACEM", "INDIAMART", "INDIGO",
+    "INDOCO", "INDUSINDBK", "INFIBEAM", "INFOBEANS", "INFOEDGE", "INFOSYS", "INFRATEL", "INFY", "INOX", "INOXLEISUR",
+    "INOXWIND", "INTELLECT", "INTERGLOBE", "IOB", "IOC", "IOLCP", "IPCA", "IPCALAB", "IRB", "IRCON",
+    "IRCTC", "IREDA", "IRFC", "ISGEC", "ITC", "IXIGO", "JAGRAN", "JAMNAUTO", "JANASFB", "JBMF",
+    "JINDALSTEL", "JIOCINEMA", "JKCEMENT", "JKLAKSHMI", "JKTYRE", "JSHL", "JSL", "JSWENERGY", "JSWSTEEL", "JTLIND",
+    "JUBLPHARMA", "JUPITERHSP", "JUSTDIAL", "JYOTI", "KAJARIACER", "KAKATIYA", "KALPATPOWR", "KALYANI", "KALYANISTEELS", "KALYANKJIL",
+    "KAMADHENU", "KAMAT", "KANDLAPORT", "KANSAINER", "KARURVYSYA", "KAVERI", "KAYNES", "KDDL", "KEC", "KELLTON",
+    "KERNEX", "KESORAMIND", "KFINTECH", "KHADIM", "KIMS", "KINETIC", "KIRLOSENG", "KIRLOSKAR", "KIRLPNU", "KOLTEPATIL",
+    "KOPRAN", "KOTAKBANK", "KPIL", "KPIT", "KRBL", "KRIBHCO", "KRSNAA", "KSOLVES", "KTKBANK", "LAKSHMI",
+    "LAKSHVIL", "LALPATHLAB", "LATENTVIEW", "LAURUSLABS", "LAXMIMACH", "LEATHIND", "LEELA", "LEMONTRE", "LIBERTY", "LICHOUSING",
+    "LICI", "LLOYDSME", "LODHA", "LT", "LTFH", "LTIM", "LTTS", "LUMAXTECH", "LUPIN", "LXCHEM",
+    "M&M", "M&MFIN", "MAHAVEER", "MAHFIN", "MAHINDCIE", "MAHINDHOLIDAYS", "MAHINDLOG", "MAHINDRA", "MAHINDSTEEL", "MAHLIFE",
+    "MAHLOG", "MAHSCOOTER", "MAHSEAMLESS", "MAKEMYTRIP", "MAKETRIP", "MANALI", "MANAPPURAM", "MANGCEM", "MANGLORE", "MANYAVAR",
+    "MAPMYINDIA", "MARICO", "MARKSANS", "MARUTI", "MASTECH", "MAWANASUG", "MAXHEALTH", "MAZDOCK", "MCDOWELL-N", "MCNALLY",
+    "MDL", "MEDPLUS", "MEP", "METALFORGE", "METRO", "METROPOLIS", "MFSL", "MGL", "MIDDAY", "MIDHANI",
+    "MINDA", "MINDAIND", "MINDTREE", "MIRAE", "MODAFIBERS", "MOIL", "MOREPEN", "MOTHERSON", "MOTILALOFS", "MPHASIS",
+    "MPSLTD", "MRF", "MRPL", "MSTEEL", "MTAR", "MTNL", "MUKANDLTD", "MUNJALAU", "MUTHOOTFIN", "NAGARFERT",
+    "NAHAR", "NALCO", "NANDAN", "NATCOPHARM", "NATIONAL", "NATIONALUM", "NAUKRI", "NAVINFLUOR", "NAVKAR", "NAVNIT",
+    "NAZARA", "NBCC", "NCC", "NCLTIND", "NDTV", "NECTAR", "NELCO", "NEOGEN", "NESCO", "NESTLEIND",
+    "NETSCRIBES", "NETWORK18", "NEWGEN", "NFL", "NHLIND", "NHPC", "NIACL", "NIITTECH", "NILKAMAL", "NIPPONLIFE",
+    "NITIN", "NKGSB", "NMDC", "NOCIL", "NTPC", "NUCLEUS", "NUVOCO", "NUZIVEEDU", "NYKAA", "OBC",
+    "OBEROIRLTY", "OFSS", "OILCOUNTUB", "OMAXE", "ONGC", "ONMOBILE", "OPTIEMUS", "OPTIMUS", "ORACLE", "ORDNANCE",
+    "ORIANA", "ORIENTBELL", "ORIENTCEM", "ORIENTELEC", "ORIENTGREEN", "ORIENTHOTEL", "PAGEIND", "PAISALOAN", "PANACEA", "PARADEEP",
+    "PARAS", "PARSVNATH", "PATEL", "PATINFOSYS", "PAUSHAK", "PAYTM", "PCBL", "PENINDUS", "PENNAR", "PERSISTENT",
+    "PETRONET", "PFC", "PFIZER", "PHILIPCARB", "PHOENIXLTD", "PHOTOQUIP", "PI", "PIDILITIND", "PIIND", "PIRAMALENT",
+    "PIRAMALPH", "PNB", "PNBHOUSING", "PNCINFRA", "PNGRURAL", "POLICYBZR", "POLYCAB", "POWERGRID", "POWRFINCO", "PPAP",
+    "PRAJ", "PRAKASH", "PRATAAP", "PRECISION", "PRECWIRE", "PREMIER", "PRESTIGE", "PRIAPISM", "PRISMJOHS", "PUNJABNB",
+    "PURVA", "PVR", "PVRL", "QUESS", "QUICKHEAL", "RACL", "RADAAN", "RADICO", "RAILTELI", "RAINBOW",
+    "RAJCEMENT", "RAJESHEXPO", "RAJRATAN", "RAJSREESUG", "RALLIS", "RAMCOCEM", "RAMCOSYS", "RANE", "RANEHOLDINGS", "RATEGAIN",
+    "RATNAMANI", "RAYMOND", "RBLBANK", "RCF", "RECLTD", "RELAXO", "RELCAPITAL", "RELIANCE", "RENEW", "REPCO",
+    "RITES", "RJIO", "RMSYSTEMS", "ROCKWOOL", "ROHITFERRO", "ROSSARI", "ROUTE", "ROYALORCH", "RPOWER", "RUPA",
+    "RUSTOMJEE", "RVNL", "SAATVIK", "SABTNL", "SADBHAV", "SAFEXPRESS", "SAGAR", "SAIL", "SAMVARDHANA", "SANGHVI",
+    "SANSERA", "SAPPHIRE", "SARASWAT", "SAREGAMA", "SARREINDIA", "SASKEN", "SATINFIN", "SBFC", "SBICARD", "SBILIFE",
+    "SBIN", "SCHAEFFLER", "SEATINGS", "SELAN", "SEQUEL", "SEQUENT", "SETCO", "SHALPAINTS", "SHEMAROO", "SHILPA",
+    "SHILPAMED", "SHIVAMAUTO", "SHOPPERSSTOP", "SHREDIGCEM", "SHREECEM", "SHREYAS", "SHRIRAM", "SHRIRAMCIT", "SHRIRAMFIN", "SHYAM",
+    "SHYAMMETL", "SIEMENS", "SIEVERT", "SIMBHOLI", "SINCLAIRS", "SINTERCOM", "SITI", "SJVN", "SKFINDIA", "SKIPPER",
+    "SMIFS", "SML", "SMSLIFE", "SNOWMAN", "SOBHA", "SOFTSOL", "SOLARA", "SOLARTOPI", "SOTC", "SOUTHBANK",
+    "SPANDANA", "SPENCERS", "SPGLOG", "SPICEJET", "SPORTKING", "SRESTHA", "SRF", "SRTRANSFIN", "SSIPL", "SSWL",
+    "STARCEMENT", "STARHEALTH", "STEELCASTINGS", "STEELXIND", "STERLINGTOOL", "STLTECH", "STOVEC", "STRIDES", "SUBHKAM", "SUBROS",
+    "SUDARSCHEM", "SUMITOMO", "SUNDARMFIN", "SUNDRM", "SUNDRMFAST", "SUNFLAG", "SUNPHA", "SUNPHARMA", "SUNTECK", "SUNTEK",
+    "SUNTV", "SUPRAJIT", "SUPREMEENG", "SURYODAY", "SUVENPHARM", "SUZLON", "SWARAJENG", "SWELECTES", "SWIGGY", "SYMPHONY",
+    "SYNDICATEBANK", "SYNGENE", "SYRMA", "TAJGVK", "TALBROS", "TANEJA", "TANGENERGY", "TANLA", "TATACHEM", "TATACOMM",
+    "TATACONSUM", "TATADIGITAL", "TATAELXSI", "TATAINVEST", "TATAMOTORS", "TATAPLAY", "TATAPOWER", "TATASKY", "TATASTEEL", "TCI",
+    "TCS", "TEAMGLOBAL", "TEAMLEASE", "TECHM", "TEJAS", "TEXMOPIPES", "TFCILTD", "THANGAMEDICAL", "THERMAX", "THIRU",
+    "THIRUMALCH", "THOMASCOOK", "THYROCARE", "TIGL", "TIINDIA", "TIMKEN", "TINPLATE", "TIPS", "TIPSIND", "TIRUPATIFL",
+    "TITAGARH", "TITAN", "TJSB", "TORNTPHARM", "TORNTPOWER", "TRACTORS", "TRANS", "TRANSPEK", "TRANSWARRANTY", "TREEHOUSE",
+    "TRENTLTD", "TRIDENT", "TRIGYN", "TRIVENI", "TTKHLTCR", "TTML", "TV18", "TVSMOTOR", "TVSSCS", "TVTODAY",
+    "UBL", "UCAL", "UCOBK", "UGROCAPITAL", "UJJIVAN", "UJJIVANSFB", "ULTRACEMCO", "UNIONBANK", "UNITDSPR", "UNITECH",
+    "UNITEDHOTELS", "UPGFACTORY", "URJAINDIA", "USHAMART", "USHAMARTIN", "UTIAMC", "UTTAM", "VAKRANGEE", "VALIANT", "VALMARK",
+    "VARDHMAN", "VARROC", "VBL", "VEDANT", "VEDL", "VGUARD", "VICEROY", "VIJAYABANK", "VIMTA", "VINATIORGA",
+    "VINDHYATEL", "VISA", "VISWPWR", "VMART", "VOLTAS", "VRLLOGISTIC", "VSTIND", "WAAREE", "WABCOINDIA", "WALCHAND",
+    "WALCHNDNAGR", "WEBSOL", "WELCORP", "WELSPUN", "WELSPUNIND", "WENDT", "WESTLIFE", "WHEELS", "WHIRLPOOL", "WINDLAS",
+    "WIPRO", "WOCKPHARMA", "WONDERLA", "WPIL", "WPIND", "XANDER", "XCHANGING", "YASH", "YATRA", "YESBANK",
+    "YODLEE", "ZEEL", "ZENSAR", "ZENSARTECH", "ZENTALIS", "ZFSTEERING", "ZODIAC", "ZOHO", "ZOMATO", "ZUARI",
 ]
 
+
 # -- 500 BSE scrip codes -------------------------------------------------------
-BSE_500 = [
-532540,500209,507685,532281,532755,540005,526299,532541,533179,542651,
-540115,532466,500408,532175,532400,543227,540900,532790,543320,543321,
-500180,532174,500247,532215,500112,532187,541153,500469,539437,540611,
-532648,532483,532134,532461,532477,532814,540065,532772,543354,532679,
-500696,500875,500790,500825,500096,531642,532424,500830,531162,500800,
-540180,532532,532497,517214,519570,532054,500696,519152,500215,500790,
-532500,500570,500520,532977,505200,500182,500477,532343,500493,500530,
-500086,500878,532539,500048,533520,519600,500533,505200,532343,
-524715,500124,500087,532488,524804,500420,500257,532523,500488,539523,
-508869,543220,532296,542650,526235,506194,542532,500359,507180,524745,
-500325,500312,532555,532898,532155,532921,500400,530965,500547,500104,
-541450,500280,500166,533519,509040,530101,500299,523467,504028,
-500470,500440,500228,500295,500113,526371,532234,500498,532286,532285,
-542652,519126,590073,513023,500108,532325,
-500034,532978,511243,533398,511218,540777,540719,540716,532532,532978,
-532454,500820,532538,500114,500331,541154,500049,543321,532868,521228,
-540376,543320,500550,500002,517354,541987,503806,523642,542830,500251,
-509480,532747,535801,532827,506395,506401,543181,543237,
-500002,500003,500008,500010,500012,500014,500017,500020,500022,500023,
-500025,500027,500031,500032,500038,500040,500043,500045,500047,500048,
-500049,500052,500055,500057,500059,500061,500063,500065,500067,500071,
-500073,500075,500079,500082,500084,500086,500087,500088,500092,500093,
-500095,500096,500097,500101,500103,500104,500106,500109,500110,500112,
-500113,500114,500116,500120,500123,500124,500125,500126,500127,500128,
-500129,500130,500133,500135,500136,500137,500138,500143,500145,500146,
-500147,500148,500150,500152,500153,500154,500155,500157,500158,500163,
-500164,500166,500168,500171,500172,500174,500176,500178,500180,500182,
-500183,500185,500186,500187,500188,500189,500190,500191,500193,500194,
-500196,500197,500199,500200,500201,500202,500205,500208,500209,500215,
-500217,500218,500219,500220,500222,500223,500224,500227,500228,500229,
-500230,500232,500233,500234,500237,500238,500239,500241,500242,500243,
-500244,500245,500247,500248,500251,500252,500253,500255,500257,500258,
-500261,500262,500263,500264,500267,500269,500271,500275,500276,500277,
-500278,500279,500280,500283,500284,500285,500287,500289,500290,500292,
-500295,500296,500297,500298,500299,500300,500302,500303,500304,500305,
-500306,500307,500308,500310,500311,500312,500313,500315,500316,500317,
-500318,500319,500320,500321,500322,500323,500325,500327,500328,500329,
-500330,500331,500332,500333,500335,500336,500337,500338,500339,500340,
+BSE_ALL = [  # ~1000 BSE scrip codes — resolved 50 at a time via Upstox API
+    500002, 500003, 500008, 500010, 500012, 500014, 500017, 500020, 500022, 500023,
+    500025, 500027, 500031, 500032, 500034, 500038, 500040, 500043, 500045, 500047,
+    500048, 500049, 500052, 500055, 500057, 500059, 500061, 500063, 500065, 500067,
+    500071, 500073, 500075, 500079, 500082, 500084, 500086, 500087, 500088, 500092,
+    500093, 500095, 500096, 500097, 500101, 500103, 500104, 500106, 500109, 500110,
+    500112, 500113, 500114, 500116, 500120, 500123, 500124, 500125, 500126, 500127,
+    500128, 500129, 500130, 500133, 500135, 500136, 500137, 500138, 500143, 500145,
+    500146, 500147, 500148, 500150, 500152, 500153, 500154, 500155, 500157, 500158,
+    500163, 500164, 500166, 500168, 500171, 500172, 500174, 500176, 500178, 500180,
+    500182, 500183, 500185, 500186, 500187, 500188, 500189, 500190, 500191, 500193,
+    500194, 500196, 500197, 500199, 500200, 500201, 500202, 500205, 500208, 500209,
+    500215, 500217, 500218, 500219, 500220, 500222, 500223, 500224, 500227, 500228,
+    500229, 500230, 500232, 500233, 500234, 500237, 500238, 500239, 500241, 500242,
+    500243, 500244, 500245, 500247, 500248, 500251, 500252, 500253, 500255, 500257,
+    500258, 500261, 500262, 500263, 500264, 500267, 500269, 500271, 500275, 500276,
+    500277, 500278, 500279, 500280, 500283, 500284, 500285, 500287, 500289, 500290,
+    500292, 500295, 500296, 500297, 500298, 500299, 500300, 500302, 500303, 500304,
+    500305, 500306, 500307, 500308, 500310, 500311, 500312, 500313, 500315, 500316,
+    500317, 500318, 500319, 500320, 500321, 500322, 500323, 500325, 500327, 500328,
+    500329, 500330, 500331, 500332, 500333, 500335, 500336, 500337, 500338, 500339,
+    500340, 500341, 500342, 500344, 500345, 500346, 500347, 500350, 500351, 500354,
+    500355, 500357, 500358, 500359, 500361, 500362, 500363, 500364, 500365, 500366,
+    500368, 500370, 500372, 500373, 500374, 500375, 500376, 500377, 500378, 500380,
+    500383, 500385, 500386, 500387, 500388, 500390, 500392, 500393, 500394, 500395,
+    500396, 500397, 500398, 500400, 500401, 500402, 500403, 500404, 500405, 500406,
+    500408, 500409, 500410, 500412, 500413, 500415, 500416, 500417, 500420, 500423,
+    500425, 500426, 500429, 500430, 500431, 500432, 500433, 500436, 500437, 500438,
+    500439, 500440, 500443, 500444, 500447, 500448, 500449, 500450, 500452, 500454,
+    500455, 500456, 500457, 500459, 500462, 500463, 500465, 500466, 500467, 500469,
+    500470, 500471, 500472, 500474, 500475, 500477, 500480, 500481, 500483, 500485,
+    500486, 500488, 500490, 500493, 500495, 500496, 500497, 500498, 500500, 500501,
+    500503, 500505, 500510, 500520, 500696, 500875, 505200, 507685, 510043, 510149,
+    510150, 510180, 510234, 510292, 510298, 510430, 510580, 511218, 511243, 511288,
+    511289, 511308, 511390, 511501, 511584, 511600, 512048, 512070, 512093, 512149,
+    512163, 512165, 512179, 512196, 512207, 512237, 512319, 512381, 512413, 512447,
+    512455, 512493, 512528, 512555, 512559, 512573, 512579, 512597, 512599, 512606,
+    512607, 512618, 512629, 512645, 512671, 512679, 513375, 513434, 513469, 513509,
+    513519, 513534, 513536, 513540, 514043, 514175, 514272, 514280, 514302, 514314,
+    514368, 514375, 515030, 515043, 515059, 515093, 516030, 516092, 517326, 517354,
+    517496, 518030, 518090, 519570, 520077, 521137, 521228, 523395, 523464, 523479,
+    523482, 523486, 523497, 523506, 523507, 523508, 523510, 523512, 523516, 523523,
+    523526, 523528, 523531, 523532, 523533, 523537, 523538, 523540, 523547, 523550,
+    523551, 523552, 523554, 523558, 523566, 523574, 523586, 523598, 523604, 523608,
+    523612, 523616, 523618, 523620, 523624, 523628, 523630, 523634, 523642, 523648,
+    523658, 523660, 523666, 523672, 523683, 523685, 524004, 524006, 524012, 524014,
+    524028, 524030, 524078, 524080, 524084, 524097, 524100, 524109, 524119, 524135,
+    524139, 524143, 524148, 524158, 524162, 524168, 524174, 524180, 524192, 524200,
+    524205, 524210, 524230, 524235, 524258, 524260, 524280, 524285, 524296, 524300,
+    524302, 524305, 524309, 524321, 524330, 524336, 524348, 524361, 524362, 524370,
+    524372, 524404, 524410, 524444, 524448, 524456, 524461, 524462, 524468, 524474,
+    524496, 524510, 524530, 524532, 524539, 524540, 524551, 524570, 524589, 524604,
+    524635, 524648, 524676, 524679, 524700, 524704, 524707, 524715, 524717, 524742,
+    524753, 524804, 526153, 526299, 526371, 526403, 530965, 531162, 531642, 532134,
+    532155, 532174, 532175, 532187, 532215, 532228, 532281, 532283, 532296, 532340,
+    532343, 532344, 532400, 532424, 532447, 532454, 532461, 532466, 532469, 532477,
+    532483, 532488, 532493, 532497, 532500, 532510, 532515, 532522, 532523, 532524,
+    532525, 532527, 532532, 532533, 532534, 532536, 532538, 532539, 532540, 532541,
+    532543, 532547, 532548, 532549, 532550, 532553, 532555, 532557, 532564, 532570,
+    532595, 532603, 532616, 532620, 532622, 532628, 532629, 532630, 532648, 532659,
+    532672, 532681, 532683, 532684, 532690, 532691, 532692, 532693, 532695, 532697,
+    532698, 532699, 532700, 532703, 532705, 532708, 532712, 532714, 532715, 532716,
+    532717, 532719, 532720, 532725, 532726, 532728, 532730, 532733, 532736, 532737,
+    532738, 532741, 532746, 532747, 532748, 532749, 532750, 532752, 532754, 532755,
+    532759, 532765, 532771, 532772, 532778, 532779, 532790, 532800, 532801, 532802,
+    532803, 532805, 532809, 532811, 532813, 532814, 532819, 532822, 532827, 532828,
+    532829, 532832, 532834, 532835, 532836, 532837, 532841, 532843, 532844, 532845,
+    532848, 532851, 532854, 532855, 532858, 532860, 532865, 532866, 532867, 532868,
+    532870, 532873, 532874, 532875, 532876, 532877, 532878, 532879, 532880, 532882,
+    532883, 532884, 532885, 532887, 532888, 532889, 532890, 532893, 532898, 532900,
+    532903, 532906, 532908, 532909, 532910, 532912, 532916, 532920, 532921, 532922,
+    532924, 532925, 532927, 532929, 532930, 532931, 532932, 532933, 532934, 532935,
+    532936, 532938, 532939, 532940, 532941, 532942, 532943, 532944, 532945, 532946,
+    532947, 532948, 532977, 532978, 532979, 532980, 532983, 533033, 533047, 533069,
+    533122, 533148, 533150, 533155, 533158, 533162, 533170, 533177, 533179, 533192,
+    533229, 533239, 533246, 533261, 533271, 533274, 533287, 533288, 533300, 533303,
+    533312, 533313, 533320, 533339, 533343, 533344, 533345, 533346, 533350, 533357,
+    533358, 533359, 533360, 533363, 533364, 533373, 533375, 533396, 533398, 533401,
+    533416, 533426, 533427, 533428, 533429, 533430, 533431, 533432, 533433, 533434,
+    533445, 533465, 533487, 533490, 533498, 533520, 533523, 533532, 533533, 533546,
+    533573, 533574, 533581, 533582, 533590, 533592, 533598, 533600, 534091, 534096,
+    534592, 535030, 535033, 535034, 535037, 535041, 535048, 535056, 535057, 535065,
+    535068, 535078, 535110, 535276, 535345, 535355, 535369, 535373, 535401, 535462,
+    535469, 535487, 535491, 535498, 535508, 535540, 535554, 535566, 535567, 535601,
+    535623, 535648, 535656, 535672, 535801, 536276, 536343, 539838, 539869, 540005,
+    540065, 540115, 540173, 540176, 540180, 540376, 540611, 540716, 540719, 540777,
+    541143, 541154, 541163, 541167, 541176, 541404, 541450, 541506, 541557, 541569,
+    541596, 541636, 541729, 541770, 541862, 542024, 542028, 542048, 542065, 542066,
+    542067, 542147, 542152, 542167, 542174, 542200, 542203, 542216, 542235, 542261,
+    542280, 542289, 542310, 542337, 542340, 542346, 542395, 542403, 542412, 542413,
+    542414, 542420, 542440, 542448, 542453, 542460, 542469, 542479, 542502, 542507,
+    542508, 542512, 542518, 542519, 542522, 542524, 542529, 542530, 542531, 542532,
+    542534, 542535, 542536, 542542, 542543, 542544, 542545, 542550, 542551, 542552,
+    542553, 542554, 542556, 542557, 542558, 542560, 542561, 542563, 542565, 542566,
+    542569, 542577, 542578, 542579, 542583, 542587, 542588, 542591, 542599, 542610,
+    542616, 542625, 542626, 542629, 542630, 542641, 542645, 542647, 542648, 542649,
+    542650, 542651, 542652, 542653, 542659, 542672, 542674, 542697, 542761, 542765,
+    542768, 542769, 542770, 542771, 542772, 542773, 542774, 542775, 542776, 542777,
+    542784, 542795, 542821, 542830, 542831, 542832, 543102, 543234, 543320, 543321,
+    543388, 543390, 543401, 543429, 543434, 543458, 543479, 543484, 543520, 543530,
+    543533, 543556, 543566, 543600, 543603, 543628, 543633, 543647, 543664, 543672,
+    543673, 543700, 543712, 543729, 543732, 543737, 543742, 543750, 543754, 543764,
+    543768, 543772, 543785, 543787, 543796, 543806, 543820, 543826, 543837, 543840,
+    543846, 543851, 543876, 543890, 543896, 543898, 543900, 543910, 543920, 543929,
+    543932, 543940, 543950, 543953, 543960, 543973, 543990, 544002, 544008, 544016,
+    544022, 544030, 544038, 544050, 544058, 544067, 544076, 544082, 544092, 544100,
+    544109, 544117, 544126, 544133, 544142, 544150, 544162, 544170, 544178, 544182,
+    544190, 544197, 544203, 544211, 544218, 544226, 544233,
 ]
+
 
 # -- SQLite database for universe ----------------------------------------------
 DB_PATH = Path("universe.db")
@@ -488,10 +596,25 @@ def _db_conn():
             exch    TEXT NOT NULL,
             sector  TEXT,
             isin    TEXT,
-            added   TEXT
+            lot_size INTEGER DEFAULT 1,
+            tick_size REAL DEFAULT 0.05,
+            added   TEXT,
+            updated TEXT
         )
     """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_exch ON instruments(exch)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_exch   ON instruments(exch)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sym    ON instruments(sym)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sector ON instruments(sector)")
+    # Add new columns to existing DB if upgrading
+    for col_def in [
+        "ALTER TABLE instruments ADD COLUMN lot_size  INTEGER DEFAULT 1",
+        "ALTER TABLE instruments ADD COLUMN tick_size REAL    DEFAULT 0.05",
+        "ALTER TABLE instruments ADD COLUMN updated   TEXT",
+    ]:
+        try:
+            conn.execute(col_def)
+        except Exception:
+            pass  # Column already exists
     conn.commit()
     return conn
 
@@ -527,10 +650,10 @@ def db_save_batch(stocks: list):
     conn = _db_conn()
     now  = datetime.datetime.now().isoformat()
     conn.executemany(
-        "INSERT OR REPLACE INTO instruments(ikey,sym,name,exch,sector,isin,added)"
-        " VALUES(?,?,?,?,?,?,?)",
+        "INSERT OR REPLACE INTO instruments(ikey,sym,name,exch,sector,isin,added,updated)"
+        " VALUES(?,?,?,?,?,?,?,?)",
         [(s["ikey"], s["sym"], s["name"], s["exch"],
-          s.get("sector",""), s.get("isin",""), now) for s in stocks]
+          s.get("sector",""), s.get("isin",""), now, now) for s in stocks]
     )
     conn.commit()
     conn.close()
@@ -634,71 +757,80 @@ def _db_progress() -> str:
 #  BATCH DOWNLOADER  — 50 NSE + 50 BSE per round, stored to SQLite
 # ===========================================================================
 
-def _resolve_nse_batch(syms: list[str], token: str) -> list[dict]:
-    """
-    Resolve a batch of NSE trading symbols to full instrument records
-    via Upstox GET /v2/market-quote/quotes.
-    We call it with instrument_key = NSE_EQ|<SYM> — Upstox accepts symbol-based keys.
-    """
-    keys    = [f"NSE_EQ|{s}" for s in syms]
-    results = []
-    hdrs    = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+def _upstox_get(endpoint: str, token: str, params: dict, timeout: int = 15):
+    """Shared Upstox GET. Returns (status_code, json_body, error_str)."""
+    hdrs = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     try:
-        r = requests.get(
-            f"{UPSTOX_BASE}/market-quote/quotes",
-            headers=hdrs,
-            params={"instrument_key": ",".join(keys)},
-            timeout=15,
-        )
-        if r.status_code != 200:
-            return []
-        data = r.json().get("data", {})
-        for ikey, info in data.items():
-            sym = ikey.replace("NSE_EQ|","").split("|")[0]
-            results.append({
-                "ikey":   ikey,
-                "sym":    sym,
-                "name":   info.get("company_name") or info.get("symbol") or sym,
-                "exch":   "NSE",
-                "sector": _guess_sector_nse(sym),
-                "isin":   info.get("isin",""),
-            })
-    except Exception:
-        pass
-    return results
+        r = requests.get(f"{UPSTOX_BASE}/{endpoint}", headers=hdrs,
+                         params=params, timeout=timeout)
+        return r.status_code, (r.json() if r.content else {}), ""
+    except Exception as e:
+        return 0, {}, str(e)
 
 
-def _resolve_bse_batch(codes: list[int], token: str) -> list[dict]:
+def _resolve_batch(instrument_keys: list, token: str, exch: str) -> tuple:
     """
-    Resolve BSE scrip codes → instrument records.
-    Upstox BSE key format: BSE_EQ|<scrip_code>
+    Resolve instrument keys via /ltp (works 24x7) with /quotes fallback.
+    Returns (stocks_list, error_str).
     """
-    keys    = [f"BSE_EQ|{c}" for c in codes]
+    if not instrument_keys:
+        return [], ""
     results = []
-    hdrs    = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    try:
-        r = requests.get(
-            f"{UPSTOX_BASE}/market-quote/quotes",
-            headers=hdrs,
-            params={"instrument_key": ",".join(keys)},
-            timeout=15,
+
+    status, body, err = _upstox_get(
+        "market-quote/ltp", token,
+        {"instrument_key": ",".join(instrument_keys)}
+    )
+
+    if status == 200:
+        data = body.get("data", {})
+    elif status in (401, 403):
+        return [], f"Auth error HTTP {status} — token expired or invalid"
+    else:
+        # Fallback to /quotes
+        status2, body2, err2 = _upstox_get(
+            "market-quote/quotes", token,
+            {"instrument_key": ",".join(instrument_keys)}
         )
-        if r.status_code != 200:
-            return []
-        data = r.json().get("data", {})
-        for ikey, info in data.items():
-            sym = info.get("symbol") or ikey.replace("BSE_EQ|","")
+        if status2 == 200:
+            data = body2.get("data", {})
+        else:
+            return [], f"HTTP {status}/{status2}: {err or err2}"
+
+    if not data:
+        # Build minimal records from keys so they are still stored
+        for ikey in instrument_keys:
+            parts = ikey.split("|")
+            raw   = parts[1] if len(parts) > 1 else ikey
             results.append({
-                "ikey":   ikey,
-                "sym":    sym,
-                "name":   info.get("company_name") or sym,
-                "exch":   "BSE",
-                "sector": _guess_sector_bse(sym),
-                "isin":   info.get("isin",""),
+                "ikey": ikey, "sym": raw.upper(), "name": raw.upper(),
+                "exch": exch, "sector": _guess_sector_nse(raw) if exch=="NSE" else _guess_sector_bse(raw),
+                "isin": "",
             })
-    except Exception:
-        pass
-    return results
+        return results, "empty_data_used_key_only"
+
+    for ikey, info in data.items():
+        sym  = (info.get("symbol") or info.get("trading_symbol") or
+                ikey.replace(f"{exch}_EQ|","").split("|")[0])
+        name = (info.get("company_name") or info.get("name") or
+                info.get("instrument_name") or sym)
+        results.append({
+            "ikey":   ikey,
+            "sym":    sym.upper().strip(),
+            "name":   (name or sym)[:40],
+            "exch":   exch,
+            "sector": _guess_sector_nse(sym) if exch=="NSE" else _guess_sector_bse(sym),
+            "isin":   info.get("isin",""),
+        })
+    return results, ""
+
+
+def _resolve_nse_batch(syms: list, token: str) -> tuple:
+    return _resolve_batch([f"NSE_EQ|{s}" for s in syms], token, "NSE")
+
+
+def _resolve_bse_batch(codes: list, token: str) -> tuple:
+    return _resolve_batch([f"BSE_EQ|{c}" for c in codes], token, "BSE")
 
 
 def download_universe_batches(token: str, progress_cb=None) -> dict:
@@ -707,7 +839,7 @@ def download_universe_batches(token: str, progress_cb=None) -> dict:
 
     Algorithm:
     -----------------------------------------------------------------
-    1. Load NSE_500 symbols and BSE_500 scrip codes
+    1. Load NSE_ALL symbols and BSE_ALL scrip codes
     2. Skip any already in DB (resume-safe)
     3. Walk both lists simultaneously in BATCH_SIZE=50 chunks
     4. For each chunk: resolve via Upstox market-quote/quotes API
@@ -720,8 +852,8 @@ def download_universe_batches(token: str, progress_cb=None) -> dict:
     existing = db_get_existing_keys()
 
     # Build pending lists (skip already resolved)
-    nse_pending = [s for s in NSE_500  if f"NSE_EQ|{s}" not in existing]
-    bse_pending = [c for c in BSE_500  if f"BSE_EQ|{c}" not in existing]
+    nse_pending = [s for s in NSE_ALL  if f"NSE_EQ|{s}" not in existing]
+    bse_pending = [c for c in BSE_ALL  if f"BSE_EQ|{c}" not in existing]
 
     total_pending = len(nse_pending) + len(bse_pending)
     if total_pending == 0:
@@ -741,55 +873,52 @@ def download_universe_batches(token: str, progress_cb=None) -> dict:
     total_batches = len(nse_batches) + len(bse_batches)
     batch_num     = 0
 
-    # Process NSE
+
+    # ---- NSE batches -------------------------------------------------------
     for batch in nse_batches:
         batch_num += 1
-        pct = done / total_pending
+        pct = done / max(total_pending, 1)
+        lbl = f"{batch[0]}...{batch[-1]}"
         if progress_cb:
             progress_cb(pct,
-                f"NSE batch {batch_num}/{len(nse_batches)} "
-                f"({batch[0]}…{batch[-1]})  —  "
-                f"{nse_added} NSE + {bse_added} BSE added so far")
-
+                f"NSE batch {batch_num}/{len(nse_batches)}: {lbl} | "
+                f"{nse_added} NSE + {bse_added} BSE saved so far")
         try:
-            stocks = _resolve_nse_batch(batch, token)
+            stocks, err = _resolve_nse_batch(batch, token)
+            if err and "Auth error" in err:
+                errors.append(err); break
+            if err and err != "empty_data_used_key_only":
+                errors.append(f"NSE {lbl}: {err}")
             if stocks:
                 db_save_batch(stocks)
                 nse_added += len(stocks)
-                done      += len(batch)
-            else:
-                errors.append(f"NSE batch {batch}: empty response (market closed?)")
-                done += len(batch)
         except Exception as e:
-            errors.append(f"NSE batch {batch[0]}: {e}")
-            done += len(batch)
+            errors.append(f"NSE {lbl}: {e}")
+        done += len(batch)
+        time.sleep(0.25)
 
-        time.sleep(0.3)   # respect rate limit
-
-    # Process BSE
+    # ---- BSE batches -------------------------------------------------------
     for batch in bse_batches:
         batch_num += 1
-        pct = done / total_pending
+        pct = done / max(total_pending, 1)
+        lbl = f"{batch[0]}...{batch[-1]}"
         if progress_cb:
             progress_cb(pct,
-                f"BSE batch {batch_num - len(nse_batches)}/{len(bse_batches)} "
-                f"({batch[0]}…{batch[-1]})  —  "
-                f"{nse_added} NSE + {bse_added} BSE added so far")
-
+                f"BSE batch {batch_num - len(nse_batches)}/{len(bse_batches)}: {lbl} | "
+                f"{nse_added} NSE + {bse_added} BSE saved so far")
         try:
-            stocks = _resolve_bse_batch(batch, token)
+            stocks, err = _resolve_bse_batch(batch, token)
+            if err and "Auth error" in err:
+                errors.append(err); break
+            if err and err != "empty_data_used_key_only":
+                errors.append(f"BSE {lbl}: {err}")
             if stocks:
                 db_save_batch(stocks)
                 bse_added += len(stocks)
-                done      += len(batch)
-            else:
-                errors.append(f"BSE batch {batch}: empty response")
-                done += len(batch)
         except Exception as e:
-            errors.append(f"BSE batch {batch[0]}: {e}")
-            done += len(batch)
-
-        time.sleep(0.3)
+            errors.append(f"BSE {lbl}: {e}")
+        done += len(batch)
+        time.sleep(0.25)
 
     counts = db_count()
     final_msg = (
@@ -1401,7 +1530,7 @@ with st.sidebar:
     col1.metric("NSE",  f"{db_c['nse']:,}")
     col2.metric("BSE",  f"{db_c['bse']:,}")
     col3.metric("Total",f"{db_c['total']:,}")
-    _sym_total = len(NSE_500) + len(BSE_500)
+    _sym_total = len(NSE_ALL) + len(BSE_ALL)
     if db_c["total"] > 0:
         pct_done = min(db_c["total"] / _sym_total * 100, 100)
         st.progress(min(pct_done/100, 1.0))
@@ -1805,9 +1934,9 @@ st.markdown(
 # ===========================================================================
 #  TABS
 # ===========================================================================
-tab_perf, tab_eps, tab_all, tab_charts, tab_exp = st.tabs([
+tab_perf, tab_eps, tab_all, tab_charts, tab_exp, tab_db = st.tabs([
     "⭐ Perfect Setups", "🔬 EPS Deep Dive",
-    "📋 Full Results",   "📊 Charts", "💾 Export"
+    "📋 Full Results",   "📊 Charts", "💾 Export", "🗄️ Database"
 ])
 
 # -- TAB 1: Perfect Setups -----------------------------------------------------
@@ -1993,6 +2122,122 @@ with tab_exp:
     st.json(cfg)
 
 # -- Footer --------------------------------------------------------------------
+# ---- TAB: Database ----------------------------------------------------------
+with tab_db:
+    st.markdown('<div class="sec-lbl">🗄️ Stock Universe Database</div>',
+                unsafe_allow_html=True)
+    _dc = db_count()
+
+    ds1, ds2, ds3, ds4 = st.columns(4)
+    ds1.metric("Total",  f"{_dc['total']:,}")
+    ds2.metric("NSE",    f"{_dc['nse']:,}")
+    ds3.metric("BSE",    f"{_dc['bse']:,}")
+    ds4.metric("Target", f"{len(NSE_ALL)+len(BSE_ALL):,} symbols")
+
+    if _dc["total"] > 0:
+        _dp = min(_dc["total"] / max(len(NSE_ALL)+len(BSE_ALL), 1) * 100, 100)
+        st.progress(_dp / 100)
+        st.caption(f"{_dp:.1f}% of target universe downloaded  "
+                   f"({_dc['total']:,} / {len(NSE_ALL)+len(BSE_ALL):,} symbols)")
+    else:
+        st.info("Database is empty. Use the buttons below to download stocks.")
+
+    st.divider()
+
+    # Download / clear controls
+    dbc1, dbc2, dbc3 = st.columns([2, 2, 1])
+    _tok_db = st.session_state.get("token_input","")
+    with dbc1:
+        if st.button("⬇️ Download Next Batch (50+50)",
+                     use_container_width=True, key="dbt_next",
+                     disabled=st.session_state.get("dl_running", False),
+                     help="Fetches one batch of 50 NSE + 50 BSE, adds to DB"):
+            if not _tok_db:
+                st.error("Paste & verify token in sidebar first")
+            else:
+                st.session_state.dl_running = True
+                st.session_state.dl_msg     = "Starting…"
+                st.session_state.dl_error   = ""
+                st.rerun()
+    with dbc2:
+        if st.button("⬇️ Download ALL (~1000 symbols)",
+                     use_container_width=True, key="dbt_all",
+                     disabled=st.session_state.get("dl_running", False)):
+            if not _tok_db:
+                st.error("Paste & verify token first")
+            else:
+                st.session_state.dl_running = True
+                st.session_state.dl_msg     = "Starting full download…"
+                st.session_state.dl_error   = ""
+                st.rerun()
+    with dbc3:
+        if st.button("🗑 Clear DB", use_container_width=True, key="dbt_clear"):
+            if DB_PATH.exists():
+                DB_PATH.unlink()
+            load_universe_cache.clear()
+            st.success("DB cleared")
+            st.rerun()
+
+    if st.session_state.get("dl_running"):
+        st.info(f"⏳ {st.session_state.get('dl_msg','Downloading…')}")
+
+    if st.session_state.get("dl_error"):
+        with st.expander("⚠️ Download errors"):
+            st.code(st.session_state.dl_error)
+
+    st.divider()
+
+    # Table of all instruments in DB
+    if _dc["total"] > 0:
+        fc1, fc2, fc3 = st.columns([2, 2, 1])
+        with fc1:
+            _db_q = st.text_input("Search", placeholder="INFY or Infosys", key="db_q")
+        with fc2:
+            _db_ex = st.selectbox("Exchange", ["All","NSE","BSE"], key="db_ex")
+        with fc3:
+            _db_sort = st.selectbox("Sort", ["sym","name","exch"], key="db_sort")
+
+        _all_db = db_load_all()
+        if _db_q:
+            _q = _db_q.upper()
+            _all_db = [r for r in _all_db
+                       if _q in r.get("sym","").upper() or _q in r.get("name","").upper()]
+        if _db_ex != "All":
+            _all_db = [r for r in _all_db if r.get("exch") == _db_ex]
+        _all_db.sort(key=lambda r: r.get(_db_sort,""))
+
+        st.caption(f"Showing {len(_all_db):,} stocks")
+
+        _df_db = pd.DataFrame([{
+            "Symbol":   r.get("sym",""),
+            "Name":     r.get("name",""),
+            "Exchange": r.get("exch",""),
+            "Sector":   r.get("sector","").replace("NSE_INDEX|Nifty ","").replace("BSE_INDEX|S&P BSE ",""),
+            "ISIN":     r.get("isin",""),
+            "Key":      r.get("ikey",""),
+        } for r in _all_db])
+
+        st.dataframe(
+            _df_db, use_container_width=True, hide_index=True,
+            column_config={
+                "Symbol":   st.column_config.TextColumn(width="small"),
+                "Name":     st.column_config.TextColumn(width="medium"),
+                "Exchange": st.column_config.TextColumn(width="small"),
+                "Sector":   st.column_config.TextColumn(width="medium"),
+                "ISIN":     st.column_config.TextColumn(width="medium"),
+                "Key":      st.column_config.TextColumn(width="large"),
+            }
+        )
+
+        # Auto-save snapshot
+        if st.button("💾 Save snapshot to universe_snapshot.json", key="db_snap"):
+            _snap = {"saved": datetime.datetime.now().isoformat(),
+                     "total": len(_all_db), "instruments": _all_db}
+            Path("universe_snapshot.json").write_text(
+                json.dumps(_snap, separators=(",",":"), ensure_ascii=False)
+            )
+            st.success(f"Saved {len(_all_db):,} stocks to universe_snapshot.json")
+
 st.markdown(
     f'<p style="font-family:JetBrains Mono,monospace;font-size:.58rem;color:#252a3a;'
     f'text-align:right;margin-top:32px;">'
