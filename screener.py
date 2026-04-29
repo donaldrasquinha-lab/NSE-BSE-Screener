@@ -140,15 +140,28 @@ def main():
 
         unique_assets = BSE_500_TICKERS.split(",") if "BSE" in target_index else (NIFTY_500_TICKERS.split(",") if "500" in target_index else NIFTY_50_TICKERS.split(","))
         
-        batch_size = 50
+                batch_size = 50
         total_assets = len(unique_assets)
         num_batches = math.ceil(total_assets / batch_size)
         
-             # 1. Map out the start and end slicing indices
+        # CRASH FIX 1: Prevent index bound leaks across lists
+        if st.session_state['active_batch_idx'] >= num_batches:
+            st.session_state['active_batch_idx'] = 0
+            
+        selected_batch_idx_raw = st.selectbox(
+            "Select Asset Cluster to Process", 
+            range(num_batches), 
+            index=st.session_state['active_batch_idx'], 
+            format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}"
+        )
+        
+        # CRASH FIX 2: Force a numeric fallback if Streamlit returns None
+        selected_batch_idx = selected_batch_idx_raw if selected_batch_idx_raw is not None else 0
+        st.session_state['active_batch_idx'] = selected_batch_idx
+        
+        # Execution pointers
         loop_start = selected_batch_idx * batch_size
         loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
-        
-        # 🟢 THE FIX: Explicitly define the pool that was throwing the NameError
         execution_pool = unique_assets[loop_start:loop_end]
 
         st.session_state['auto_run'] = st.checkbox("Enable Automated Loop", value=st.session_state['auto_run'])
@@ -159,23 +172,9 @@ def main():
             prog_bar = st.progress(0.0)
             processed_results = []
             
-            # This loop will now execute perfectly without the NameError!
             for idx, symbol in enumerate(execution_pool):
                 processed_results.append(calculate_momentum_node(symbol, data_source, token_input))
                 prog_bar.progress((idx + 1) / len(execution_pool))
-
-            new_df = pd.DataFrame(processed_results)
-            combined_df = pd.concat([st.session_state['scanned_df'], new_df]).drop_duplicates(subset=["Symbol"], keep='last')
-            st.session_state['scanned_df'] = combined_df
-
-            if st.session_state['auto_run']:
-                if st.session_state['active_batch_idx'] < num_batches - 1:
-                    st.session_state['active_batch_idx'] += 1
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.session_state['auto_run'] = False
-                    st.success("🎉 All batches automated successfully!")
 
     with tab_db:
         if st.button("🗑️ Clear Database"):
