@@ -140,7 +140,7 @@ def main():
 
         unique_assets = BSE_500_TICKERS.split(",") if "BSE" in target_index else (NIFTY_500_TICKERS.split(",") if "500" in target_index else NIFTY_50_TICKERS.split(","))
         
-                batch_size = 50
+           batch_size = 50
         total_assets = len(unique_assets)
         num_batches = math.ceil(total_assets / batch_size)
         
@@ -155,8 +155,12 @@ def main():
             format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}"
         )
         
-        # CRASH FIX 2: Force a numeric fallback if Streamlit returns None
-        selected_batch_idx = selected_batch_idx_raw if selected_batch_idx_raw is not None else 0
+        # 🟢 THE CRITICAL FIX: Force a numeric fallback if Streamlit returns None
+        if selected_batch_idx_raw is None:
+            selected_batch_idx = 0
+        else:
+            selected_batch_idx = selected_batch_idx_raw
+            
         st.session_state['active_batch_idx'] = selected_batch_idx
         
         # Execution pointers
@@ -175,6 +179,7 @@ def main():
             for idx, symbol in enumerate(execution_pool):
                 processed_results.append(calculate_momentum_node(symbol, data_source, token_input))
                 prog_bar.progress((idx + 1) / len(execution_pool))
+
 
     with tab_db:
         if st.button("🗑️ Clear Database"):
