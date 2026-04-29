@@ -498,14 +498,19 @@ def main():
                         st.warning(f"Unable to load chart for {symbol}. Moving to next.")
     # --- 🟢 TAB 5: SECTOR HEATMAP ---
     with tab_heatmap:
-        st.markdown("<div class='slbl'>🗺️ Sector Heatmap Distribution</div>", unsafe_allow_html=True)
-        if st.session_state['scanned_df'].empty:
-            st.info("Database empty. You must process stocks on Tab 1 first.")
-        else:
-            df_full = st.session_state['scanned_df']
+                    # 1. Safely extract prices even if the column is missing or broken
+            if 'Live Price' in df_full.columns:
+                df_full['Clean_Price'] = pd.to_numeric(
+                    df_full['Live Price'].astype(str).str.replace('₹', '').str.replace(',', ''), 
+                    errors='coerce'
+                ).fillna(1.0)
+            else:
+                # Fallback if no prices were recorded in the session
+                df_full['Clean_Price'] = 1.0
             
-            # Clean and clean prices for heatmap sizing
-            df_full['Clean_Price'] = pd.to_numeric(df_full['Live Price'].astype(str).str.replace('₹', '').str.replace(',', ''), errors='coerce').fillna(1.0)
+            # Ensure price is at least 1 to prevent division by zero in heatmap
+            df_full['Clean_Price'] = df_full['Clean_Price'].apply(lambda x: x if x > 0 else 1.0)
+
             
             # Create interactive treemap heatmap
             fig_hm = go.Figure(go.Treemap(
