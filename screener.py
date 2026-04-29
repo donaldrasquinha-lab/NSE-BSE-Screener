@@ -20,8 +20,8 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & CONSTANTS
 # ===========================================================================
-UPSTOX_BASE  = "https://upstox.com"
-UPSTOX_CDN_CSV = "https://upstox.com"
+UPSTOX_BASE  = "https://api.upstox.com/v2"
+UPSTOX_CDN_CSV = "https://api.upstox.com/v2"
 
 # Fallback mapping to populate clean sectors for known top assets
 SECTOR_MAP = {
