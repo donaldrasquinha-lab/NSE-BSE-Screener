@@ -116,17 +116,27 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 # ===========================================================================
 
 def check_upstox_token(token: str) -> bool:
-    """Verifies Upstox Token validity using the official API v2 profile endpoint."""
+    """
+    Verifies Upstox Token validity using the charges/brokerage endpoint.
+    This does not require read permissions and heavily validates active access tokens.
+    """
     clean_token = token.strip() if token else ""
     if not clean_token:
         return False
-    url = f"{UPSTOX_BASE}/user/profile"
+        
+    url = "https://upstox.com/charges/brokerage"
+    
+    # Precise capitalization and spacing
     headers = {
-        'Accept': 'application/json', 
+        'Accept': 'application/json',
         'Authorization': f'Bearer {clean_token}'
     }
+    
+    # Dummy parameters required by endpoint
+    params = {'instrument_token': 'NSE_EQ|INE848E01016', 'quantity': 1, 'product': 'I', 'transaction_type': 'B', 'price': 100}
+    
     try:
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, params=params, timeout=5)
         return response.status_code == 200
     except Exception:
         return False
@@ -139,7 +149,6 @@ def fetch_and_prepare_csv():
             with gzip.open(io.BytesIO(response.content), 'rt') as f:
                 df = pd.read_csv(f)
             
-            # Filter strictly for standard NSE/BSE Equity shares
             df_filtered = df[(df['exchange'].isin(['NSE', 'BSE'])) & (df['instrument_type'] == 'EQUITY')]
             df_final = df_filtered[['tradingsymbol', 'exchange', 'name']].copy()
             df_final.rename(columns={'tradingsymbol': 'Symbol', 'exchange': 'Exchange', 'name': 'Company Name'}, inplace=True)
@@ -194,16 +203,9 @@ def main():
     if 'uploaded_instruments' not in st.session_state:
         st.session_state['uploaded_instruments'] = pd.DataFrame()
 
-    st.markdown("""
-    <div class='hdr'>
-        <h1>NSE + BSE Multibagger Screener</h1>
-        <div class='sub'>V6.0 • REAL-TIME DATA PROCESSING ENGINE</div>
-    </div>
-    """, unsafe_allow_html=True)
-
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
-    # --- TAB 1: SCREENER (Now features token input AND local file physical download) ---
+    # --- TAB 1: SCREENER ---
     with tab_screener:
         st.markdown("<div class='slbl'>Upstox API Authentication (v2)</div>", unsafe_allow_html=True)
         if 'upstox_token' not in st.session_state:
@@ -216,7 +218,7 @@ def main():
             if check_upstox_token(token_input):
                 st.success("Upstox Status: Connected successfully!")
             else:
-                st.error("Upstox Status: Disconnected. Invalid token.")
+                st.error("Upstox Status: Disconnected. Invalid or expired token.")
         else:
             st.warning("Upstox Status: Disconnected. Waiting for token input.")
             
@@ -235,7 +237,7 @@ def main():
             st.success("CSV compiled successfully! Click the button to save it locally.")
             st.info("Once downloaded, head over to Tab 2 to upload this identical file into your scanner profile.")
 
-    # --- TAB 2: DATABASE (Drag-and-drop uploader) ---
+    # --- TAB 2: DATABASE ---
     with tab_db:
         st.markdown("<div class='slbl'>Database Execution Gateway</div>", unsafe_allow_html=True)
         st.caption("Drag and drop the 'upstox_instruments.csv' file that you downloaded from Tab 1.")
