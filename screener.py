@@ -21,7 +21,7 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
-UPSTOX_BASE = "https://upstox.com"
+UPSTOX_BASE = "https://api.upstox.com/v2"
 
 NIFTY_500_TICKERS = (
     "360ONE,3MINDIA,ABB,ACC,AIAENG,APLAPOLLO,AUBANK,AETHER,AFFLE,AJANTPHARM,APLLTD,ALKEM,ALKYLAMINE,"
