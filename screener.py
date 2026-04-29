@@ -146,7 +146,7 @@ def main():
     selected_batch_idx_raw = st.selectbox("Select Asset Cluster to Process",range(num_batches),index=st.session_state['active_batch_idx'], 
         format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}")
         
-        # 🟢 THE CRITICAL FIX: Forces fallback to 0 if Streamlit returns None [1]
+    # 🟢 THE CRITICAL FIX: Forces fallback to 0 if Streamlit returns None [1]
         selected_batch_idx = selected_batch_idx_raw if selected_batch_idx_raw is not None else 0
         st.session_state['active_batch_idx'] = selected_batch_idx
         
