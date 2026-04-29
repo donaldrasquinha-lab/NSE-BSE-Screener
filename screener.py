@@ -187,7 +187,7 @@ def main():
             st.session_state['active_batch_idx'] = 0
             st.session_state['auto_run'] = False
             st.rerun()
-        st.dataframe(st.session_state['scanned_df'].sort_values(by='Symbol').reset_index(drop=True), use_container_width=True)
+        st.dataframe(st.session_state['scanned_df'].sort_values(by='Symbol').reset_index(drop=True), width='stretch'
 
     with tab_momentum:
         df_full = st.session_state['scanned_df']
@@ -373,7 +373,7 @@ def main():
                 
                 # Visual backup grid
                 st.markdown("<div class='slbl'>Momentum Picks Ledger</div>", unsafe_allow_html=True)
-                st.dataframe(df_momentum.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
+                st.dataframe(df_momentum.sort_values(by='Sector').reset_index(drop=True), width='stretch')
 
 if __name__ == "__main__":
  main()
