@@ -9,7 +9,7 @@ INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
 """
 
-import io, gzip
+import io
 import requests
 import numpy  as np
 import pandas as pd
@@ -20,8 +20,10 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & CONSTANTS
 # ===========================================================================
-UPSTOX_BASE  = "https://api.upstox.com/v2"
-UPSTOX_CDN_CSV = "https://api.upstox.com/v2"
+UPSTOX_BASE  = "https://upstox.com"
+
+# Direct URL to parse equities safely without CDN gzip restrictions
+UPSTOX_DIRECT_URL = "https://upstox.com"
 
 # Fallback mapping to populate clean sectors for known top assets
 SECTOR_MAP = {
@@ -173,7 +175,7 @@ def main():
 
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
-    # --- TAB 1: SCREENER (CLOUD SYNC HUB) ---
+    # --- TAB 1: SCREENER ---
     with tab_screener:
         st.markdown("<div class='slbl'>Upstox API Authentication (v2)</div>", unsafe_allow_html=True)
         if 'upstox_token' not in st.session_state:
@@ -193,19 +195,27 @@ def main():
         st.markdown("<div class='slbl'>Heavy Cloud Scan Extractor</div>", unsafe_allow_html=True)
         st.caption("Pulls the raw list from Upstox and builds Sectors, EPS, RS, and 21MA metrics for the scanner.")
         
-        # 🟢 THE REQUESTED FEATURE: THE MASTER PULL & CALCULATE BUTTON
         if st.button("🛰️ Pull & Process All Equities from Upstox"):
             try:
-                with st.spinner("Downloading live symbol tapes from Upstox CDN..."):
-                    response = requests.get(UPSTOX_CDN_CSV, stream=True, timeout=10)
-                    with gzip.open(io.BytesIO(response.content), 'rt') as f:
-                        df = pd.read_csv(f)
+                with st.spinner("Downloading live symbol tapes from Upstox..."):
+                    # Uses explicit User-Agent to stop Upstox CDN from returning JSON errors
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    }
+                    response = requests.get(UPSTOX_DIRECT_URL, headers=headers, timeout=15)
+                    
+                    if response.status_code != 200:
+                        st.error(f"Failed to fetch data. Upstox server returned status {response.status_code}.")
+                        return
+                    
+                    # Decodes direct CSV payload
+                    df = pd.read_csv(io.StringIO(response.text))
                 
-                # Filter solely for standard cash shares
-                df_filtered = df[(df['exchange'].isin(['NSE', 'BSE'])) & (df['instrument_type'] == 'EQUITY')]
+                # Filter solely for cash shares
+                df_filtered = df[(df['instrument_type'] == 'EQUITY')]
                 unique_assets = df_filtered['tradingsymbol'].unique()
                 
-                # Cap the loop to avoid execution timeouts in Streamlit (Modify this value to scan more)
+                # Capped limit to prevent execution timeouts
                 cap_limit = 100
                 st.info(f"Retrieved {len(unique_assets)} targets. Processing top {cap_limit} to prevent server freeze...")
                 
@@ -215,17 +225,15 @@ def main():
                 
                 for idx, symbol in enumerate(unique_assets[:cap_limit]):
                     status_box.text(f"Extracting Tape + Technicals: {symbol}")
-                    # Prioritize NSE data, fallback to BSE
-                    exch = "NSE" if symbol in df_filtered[df_filtered['exchange'] == 'NSE']['tradingsymbol'].values else "BSE"
                     
-                    data_node = calculate_momentum_node(symbol, exch)
+                    # Assume NSE primarily, or detect dynamically
+                    data_node = calculate_momentum_node(symbol, "NSE")
                     processed_results.append(data_node)
                     
                     prog_bar.progress((idx + 1) / cap_limit)
                     
                 status_box.success("Execution boundary finished!")
                 
-                # Commit to shared global memory
                 st.session_state['scanned_df'] = pd.DataFrame(processed_results)
                 st.info("Heavy parameters extracted! Full table loaded to Tab 2 Database.")
                 
@@ -241,7 +249,6 @@ def main():
         else:
             df_full = st.session_state['scanned_df']
             
-            # Interactive Bar Graph
             sector_counts = df_full['Sector'].value_counts().reset_index()
             sector_counts.columns = ['Sector', 'Count']
             fig = go.Figure(data=[go.Bar(
@@ -256,7 +263,6 @@ def main():
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # Master DataFrame Rendering
             st.markdown("<div class='slbl'>Extracted Master Stock List (Sorted by Sector)</div>", unsafe_allow_html=True)
             st.dataframe(
                 df_full.sort_values(by='Sector').reset_index(drop=True).style.map(
@@ -275,11 +281,9 @@ def main():
         else:
             df_full = st.session_state['scanned_df']
             
-            # Sift the extracted data into clusters
             perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')].to_dict('records')
             other_results = df_full[~((df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT'))].to_dict('records')
             
-            # Render Group 1: Hits
             st.markdown("<div class='group-header'>🔥 Group 1: Perfect Momentum Picks</div>", unsafe_allow_html=True)
             if perfect_hits:
                 for r in perfect_hits:
@@ -297,7 +301,6 @@ def main():
             else:
                 st.info("No assets met all calculated momentum parameters in this specific run.")
             
-            # Render Group 2: Monitored pool
             st.markdown("<div class='group-header'>📊 Group 2: Other Scanned Assets</div>", unsafe_allow_html=True)
             for r in other_results:
                 st.markdown(f"""
@@ -306,7 +309,7 @@ def main():
                     <div class="mgrid">
                         <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['EPS Accel']}</div></div>
                         <div class="met"><div class="ml">RS RESILIENT</div><div class="mv">{r['RS Resilient']}</div></div>
-                        <div class="met"><div class="ml">21MA BUY ZONE</div><div class="mv">{r['21MA Buy Zone']}</div></div>
+                        <div class="met"><div class="ml">21MA Buy Zone</div><div class="mv">{r['21MA Buy Zone']}</div></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
