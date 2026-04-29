@@ -305,7 +305,7 @@ def main():
                                 height=350,
                                 margin=dict(l=10, r=10, t=20, b=20)
                             )
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width='stretch')
                     except Exception as e:
                         st.warning(f"Error computing performance metrics for {symbol}.")
 
@@ -366,7 +366,7 @@ def main():
                         height=500,
                         margin=dict(l=10, r=10, t=50, b=10)
                     )
-                    st.plotly_chart(fig_hm, use_container_width=True)
+                    st.plotly_chart(fig_hm, width='stretch')
                     
                 except Exception as e:
                     st.error(f"Plotly could not build the tree. Error: {e}")
