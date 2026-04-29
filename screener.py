@@ -3,7 +3,9 @@
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
 Tab 1: Cloud Sync supporting Yahoo & Upstox in Batches of 50
 Tab 2: Master Ledger Database that continuously appends results
-Tab 3: Clustered Momentum Results Grid sorted from the full database
+Tab 3: Clustered Momentum Results Grid
+Tab 4: Momentum Picks with Interactive Charts
+Tab 5: Sector Heatmap Grid
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
@@ -17,13 +19,13 @@ import pandas as pd
 import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
-UPSTOX_BASE = "https://api.upstox.com/v2"
+UPSTOX_BASE = "https://upstox.com"
 
-# Hardcoded massive pool mapped exactly to your prompt input
 BSE_500_TICKERS = (
     "GRSE,ETERNAL,RELIANCE,BANDHANBNK,VEDL,MAZDOCK,HDFCBANK,SUNPHARMA,COCHINSHIP,CEATLTD,"
     "M&M,SBIN,ADANIPOWER,MARUTI,GROWW,COALINDIA,ICICIBANK,BSE,DATAPATTNS,EMMVEE,ONGC,"
@@ -61,7 +63,7 @@ BSE_500_TICKERS = (
     "SONATSOFTW,NEULANDLAB,TRIDENT,PVRINOX,SYNGENE,IOB,CPPLUS,SIGNATURE,ALKEM,CCL,ESCORTS,FLUOROCHEM,"
     "ELECON,SCHAEFFLER,ATUL,GODREJIND,IRB,LTTS,FIRSTCRY,ECLERX,ENDURANCE,SUNTV,SOBHA,ABBOTINDIA,"
     "APTUS,VTL,JMFINANCIL,SHREECEM,BSOFT,ITI,KAJARIACER,CRAFTSMAN,CREDITACC,CHAMBLFERT,TECHNOE,"
-    "CHOLAHLDNG,SUNDARMFIN,AFCONS,CARBORUNIV,BHARTIHEXA,ACC,AN_THEM,SCHNEIDER,BAJAJHLDNG,PINELABS,"
+    "CHOLAHLDNG,SUNDARMFIN,AFCONS,CARBORUNIV,BHARTIHEXA,ACC,ANTHEM,SCHNEIDER,BAJAJHLDNG,PINELABS,"
     "AEGISLOG,MINDACORP,IPCALAB,CANFINHOME,CENTRALBK,NUVAMA,BLS,NIVABUPA,UCOBANK,NAVA,WELSPUNLIV,"
     "AJANTPHARM,GICRE,MEDANTA,JUBLPHARMA,3MINDIA,LATENTVIEW,GABRIEL,TTML,GODIGIT,EMAMILTD,RAINBOW,"
     "JKCEMENT,INDGN,ACE,HDBFS,INDIAMART,ABDL,BLUEJET,POLYMED,ZYDUSWELL,CRISIL,KPRMILL,AEGISVOPAK,"
@@ -80,7 +82,6 @@ NIFTY_50_TICKERS = (
     "TITAN,ULTRACEMCO,UPL,WIPRO"
 )
 
-# Baseline Sector mapping for fallbacks
 SECTOR_MAP = {
     "HDFCBANK": "Financial Services", "ICICIBANK": "Financial Services", "SBIN": "Financial Services", 
     "AXISBANK": "Financial Services", "KOTAKBANK": "Financial Services", "BAJFINANCE": "Financial Services",
@@ -188,11 +189,9 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
     close_px = 0.0
     yf_symbol = f"{symbol}.NS" if exchange == "NSE" else f"{symbol}.BO"
     
-    # Attempt Upstox price fetch
     if source == "Upstox" and token:
         close_px = pull_upstox_price(symbol, token, exchange)
         
-    # Execution via Yahoo Finance
     try:
         stock = yf.Ticker(yf_symbol)
         hist = stock.history(period="1y")
@@ -227,7 +226,6 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
 # ===========================================================================
 
 def main():
-    # 🟢 STATE INITIALIZATION: Ensures continuous addition of lists
     if 'scanned_df' not in st.session_state:
         st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
 
@@ -238,7 +236,9 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
+    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs([
+        "Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"
+    ])
 
     # --- TAB 1: SCREENER ---
     with tab_screener:
@@ -269,7 +269,6 @@ def main():
         if target_index == "Custom List":
             custom_list = st.text_area("Enter Custom Tickers (Comma Separated):", "RELIANCE,TCS,INFY")
 
-        # Set up assets list
         if target_index == "BSE 500 (Custom Input)":
             unique_assets = BSE_500_TICKERS.split(",")
             exch = "NSE"
@@ -280,7 +279,6 @@ def main():
             unique_assets = [x.strip().upper() for x in custom_list.split(",") if x.strip()]
             exch = "NSE"
 
-        # 🟢 BATCH SELECTION LOGIC (Set to 50 as requested)
         batch_size = 50
         total_assets = len(unique_assets)
         num_batches = math.ceil(total_assets / batch_size)
@@ -306,35 +304,27 @@ def main():
             
             for idx, symbol in enumerate(execution_pool):
                 status_box.text(f"Extracting [{data_source}]: {symbol}")
-                
                 data_node = calculate_momentum_node(symbol, data_source, st.session_state['upstox_token'], exch)
                 processed_results.append(data_node)
                 prog_bar.progress((idx + 1) / len(execution_pool))
                 
             status_box.success("Scan cluster limits hit successfully!")
             
-            # 🟢 CONTINUOUS APPENDING LOGIC
             new_df = pd.DataFrame(processed_results)
-            
-            # Pull old list, combine with new, and remove duplicates keeping the newest data
             combined_df = pd.concat([st.session_state['scanned_df'], new_df])
             combined_df.drop_duplicates(subset=["Symbol"], keep='last', inplace=True)
-            
-            # Save the extended list back to session state
             st.session_state['scanned_df'] = combined_df
 
     # --- TAB 2: DATABASE ---
     with tab_db:
         st.markdown("<div class='slbl'>Database Grid</div>", unsafe_allow_html=True)
-        
         if st.session_state['scanned_df'].empty:
             st.info("No scanned assets in registry. Go to Tab 1 and click the 'Process' button.")
         else:
-            col_db1, col_db2 = st.columns([5, 1])
+            col_db1, col_db2 = st.columns(2)
             with col_db1:
                 st.write(f"📊 Currently holding **{len(st.session_state['scanned_df'])}** unique processed assets.")
             with col_db2:
-                # Button to clear session memory
                 if st.button("🗑️ Clear Database"):
                     st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
                     st.rerun()
@@ -382,5 +372,63 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-if __name__ == "__main__":
-    main()
+    # --- 🟢 NEW TAB 4: MOMENTUM HUB WITH CHARTS ---
+    with tab_charts:
+        st.markdown("<div class='slbl'>🎯 Active Momentum Executions</div>", unsafe_allow_html=True)
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df']
+            # Target exact hits
+            perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')]
+            
+            if perfect_hits.empty:
+                st.info("No perfect momentum fits detected in the current scanned array.")
+            else:
+                st.write(f"Found **{len(perfect_hits)}** highly optimized momentum setups:")
+                
+                # Fetching chart arrays using isolated state
+                for idx, row in perfect_hits.iterrows():
+                    symbol = row['Symbol']
+                    live_px = row['Live Price']
+                    
+                    st.markdown(f"""
+                    <div class="scard hit">
+                        <div class="ribbon">🔥 MOMENTUM PICK</div>
+                        <div class="ch">
+                            <div class="sym">{symbol}</div>
+                            <div class="live-px">₹{live_px}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Fetch price history specifically for the candlestick draw
+                    try:
+                        ticker_data = yf.Ticker(f"{symbol}.NS")
+                        hist_6m = ticker_data.history(period="6m")
+                        
+                        if not hist_6m.empty:
+                            hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()
+                            
+                            # Build Candle chart
+                            fig = go.Figure(data=[
+                                go.Candlestick(
+                                    x=hist_6m.index,
+                                    open=hist_6m['Open'],
+                                    high=hist_6m['High'],
+                                    low=hist_6m['Low'],
+                                    close=hist_6m['Close'],
+                                    name="Candles"
+                                ),
+                                go.Scatter(
+                                    x=hist_6m.index, 
+                                    y=hist_6m['21EMA'], 
+                                    mode='lines', 
+                                    line=dict(color='#fb923c', width=1.5), 
+                                    name="21 EMA"
+                                )
+                            ])
+                            
+                            fig.update_layout(
+                                xaxis_rangeslider_visible=False,
+                                paper_bgcolor='rgba(0,0,0,
