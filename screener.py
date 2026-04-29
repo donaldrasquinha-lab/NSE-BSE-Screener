@@ -144,12 +144,18 @@ def main():
         total_assets = len(unique_assets)
         num_batches = math.ceil(total_assets / batch_size)
         
-        selected_batch_idx = st.selectbox("Select Asset Cluster to Process", range(num_batches), index=st.session_state['active_batch_idx'], format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}")
+        # 🟢 CRASH FIX: Ensure the active index is never out of bounds
+        if st.session_state['active_batch_idx'] >= num_batches:
+            st.session_state['active_batch_idx'] = 0
+            
+        selected_batch_idx = st.selectbox(
+            "Select Asset Cluster to Process", 
+            range(num_batches), 
+            index=st.session_state['active_batch_idx'], 
+            format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}"
+        )
         st.session_state['active_batch_idx'] = selected_batch_idx
-        
-        loop_start = selected_batch_idx * batch_size
-        loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
-        execution_pool = unique_assets[loop_start:loop_end]
+
 
         st.session_state['auto_run'] = st.checkbox("Enable Automated Loop", value=st.session_state['auto_run'])
         manual_run = st.button("🛰️ Pull & Process Selected Batch")
