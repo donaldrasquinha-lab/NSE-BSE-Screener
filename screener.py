@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Cloud Sync supporting Yahoo & Upstox in Batches of 50
+Tab 1: Cloud Sync supporting Yahoo & Upstox (With Automatic Batch Processing)
 Tab 2: Master Ledger Database that continuously appends results
-Tab 3: Clustered Momentum Results Grid sorted from the full database
-
-INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
-RUN:      streamlit run screener_st.py
+Tab 3: Clustered Momentum Results Grid
+Tab 4: Momentum Picks with Interactive Candlestick Charts
+Tab 5: Bulletproof Sector Heatmap Grid
 """
 
 import io
 import math
+import time
 import requests
 import numpy  as np
 import pandas as pd
@@ -21,9 +21,7 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
-UPSTOX_BASE = "https://api.upstox.com/v2"
-
-# Hardcoded massive pool mapped exactly to your prompt input
+UPSTOX_BASE = "https://upstox.com"
 
 NIFTY_500_TICKERS = (
     "360ONE,3MINDIA,ABB,ACC,AIAENG,APLAPOLLO,AUBANK,AETHER,AFFLE,AJANTPHARM,APLLTD,ALKEM,ALKYLAMINE,"
@@ -58,6 +56,7 @@ NIFTY_500_TICKERS = (
     "VGUARD,VMART,VIPIND,VAIBHAVGBL,VAKRANGEE,VARROC,VBL,VEDL,VINATIORG,VOLTAS,WELCORP,WELSPUNLIV,WESTLIFE,"
     "WHIRLPOOL,WIPRO,YESBANK,ZFCVINDIA,ZEEL,ZENSARTECH,ZOMATO,ZYDUSLIFE"
 )
+
 BSE_500_TICKERS = (
     "GRSE,ETERNAL,RELIANCE,BANDHANBNK,VEDL,MAZDOCK,HDFCBANK,SUNPHARMA,COCHINSHIP,CEATLTD,"
     "M&M,SBIN,ADANIPOWER,MARUTI,GROWW,COALINDIA,ICICIBANK,BSE,DATAPATTNS,EMMVEE,ONGC,"
@@ -95,7 +94,7 @@ BSE_500_TICKERS = (
     "SONATSOFTW,NEULANDLAB,TRIDENT,PVRINOX,SYNGENE,IOB,CPPLUS,SIGNATURE,ALKEM,CCL,ESCORTS,FLUOROCHEM,"
     "ELECON,SCHAEFFLER,ATUL,GODREJIND,IRB,LTTS,FIRSTCRY,ECLERX,ENDURANCE,SUNTV,SOBHA,ABBOTINDIA,"
     "APTUS,VTL,JMFINANCIL,SHREECEM,BSOFT,ITI,KAJARIACER,CRAFTSMAN,CREDITACC,CHAMBLFERT,TECHNOE,"
-    "CHOLAHLDNG,SUNDARMFIN,AFCONS,CARBORUNIV,BHARTIHEXA,ACC,AN_THEM,SCHNEIDER,BAJAJHLDNG,PINELABS,"
+    "CHOLAHLDNG,SUNDARMFIN,AFCONS,CARBORUNIV,BHARTIHEXA,ACC,ANTHEM,SCHNEIDER,BAJAJHLDNG,PINELABS,"
     "AEGISLOG,MINDACORP,IPCALAB,CANFINHOME,CENTRALBK,NUVAMA,BLS,NIVABUPA,UCOBANK,NAVA,WELSPUNLIV,"
     "AJANTPHARM,GICRE,MEDANTA,JUBLPHARMA,3MINDIA,LATENTVIEW,GABRIEL,TTML,GODIGIT,EMAMILTD,RAINBOW,"
     "JKCEMENT,INDGN,ACE,HDBFS,INDIAMART,ABDL,BLUEJET,POLYMED,ZYDUSWELL,CRISIL,KPRMILL,AEGISVOPAK,"
@@ -114,7 +113,6 @@ NIFTY_50_TICKERS = (
     "TITAN,ULTRACEMCO,UPL,WIPRO"
 )
 
-# Baseline Sector mapping for fallbacks
 SECTOR_MAP = {
     "HDFCBANK": "Financial Services", "ICICIBANK": "Financial Services", "SBIN": "Financial Services", 
     "AXISBANK": "Financial Services", "KOTAKBANK": "Financial Services", "BAJFINANCE": "Financial Services",
@@ -216,17 +214,15 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
     """Calculates momentum matrix dynamically via Yahoo or Upstox."""
     res = {
         "Symbol": symbol, "Live Price": 0.0, "EPS Accel": "No Data", 
-        "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", "Sector": SECTOR_MAP.get(symbol, "Other")
+        "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", "Sector": SECTOR_MAP.get(symbol, "Other / Diversified")
     }
     
     close_px = 0.0
     yf_symbol = f"{symbol}.NS" if exchange == "NSE" else f"{symbol}.BO"
     
-    # Attempt Upstox price fetch
     if source == "Upstox" and token:
         close_px = pull_upstox_price(symbol, token, exchange)
         
-    # Execution via Yahoo Finance
     try:
         stock = yf.Ticker(yf_symbol)
         hist = stock.history(period="1y")
@@ -245,8 +241,9 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
             res["RS Resilient"] = "✅ YES"
             
         info = stock.info
-        if "sector" in info:
+        if "sector" in info and info["sector"]:
             res["Sector"] = info["sector"]
+            
         if "forwardEps" in info and "trailingEps" in info:
             if info["forwardEps"] is not None and info["trailingEps"] is not None:
                 res["EPS Accel"] = "✅ Yes" if info["forwardEps"] > info["trailingEps"] else "❌ No"
@@ -261,9 +258,12 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
 # ===========================================================================
 
 def main():
-    # 🟢 STATE INITIALIZATION: Ensures continuous addition of lists
     if 'scanned_df' not in st.session_state:
         st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
+    
+    # Track the active batch across refreshes
+    if 'active_batch_idx' not in st.session_state:
+        st.session_state['active_batch_idx'] = 0
 
     st.markdown("""
     <div class='hdr'>
@@ -272,7 +272,9 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
+    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs([
+        "Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"
+    ])
 
     # --- TAB 1: SCREENER ---
     with tab_screener:
@@ -297,19 +299,17 @@ def main():
         with col_s1:
             data_source = st.selectbox("Select Price/Data Source", ["Yahoo Finance", "Upstox"])
         with col_s2:
-            # 🟢 UPDATED: Added Nifty 500 to the choices
-            target_index = st.selectbox("Select Target Pool to Scan", ["Nifty 500", "BSE 500 (Custom Input)", "Nifty 50", "Custom List"])
+            target_index = st.selectbox("Select Target Pool to Scan", ["BSE 500 (Custom Input)", "Nifty 500", "Nifty 50", "Custom List"])
             
         custom_list = ""
         if target_index == "Custom List":
             custom_list = st.text_area("Enter Custom Tickers (Comma Separated):", "RELIANCE,TCS,INFY")
 
-        # 🟢 UPDATED: Set target list based on dropdown including Nifty 500
-        if target_index == "Nifty 500":
-            unique_assets = NIFTY_500_TICKERS.split(",")
-            exch = "NSE"
-        elif target_index == "BSE 500 (Custom Input)":
+        if target_index == "BSE 500 (Custom Input)":
             unique_assets = BSE_500_TICKERS.split(",")
+            exch = "NSE"
+        elif target_index == "Nifty 500":
+            unique_assets = NIFTY_500_TICKERS.split(",")
             exch = "NSE"
         elif target_index == "Nifty 50":
             unique_assets = NIFTY_50_TICKERS.split(",")
@@ -318,8 +318,6 @@ def main():
             unique_assets = [x.strip().upper() for x in custom_list.split(",") if x.strip()]
             exch = "NSE"
 
-
-        # 🟢 BATCH SELECTION LOGIC (Set to 50 as requested)
         batch_size = 50
         total_assets = len(unique_assets)
         num_batches = math.ceil(total_assets / batch_size)
@@ -330,96 +328,15 @@ def main():
             end = min((i + 1) * batch_size, total_assets)
             batch_labels.append(f"Batch {i+1}: Stocks {start+1} to {end}")
             
-        selected_batch_idx = st.selectbox("Select Asset Cluster to Process", range(num_batches), format_func=lambda x: batch_labels[x])
+        # 🟢 STEP 1: Link dropdown directly to session state
+        selected_batch_idx = st.selectbox(
+            "Select Asset Cluster to Process", 
+            range(num_batches), 
+            index=st.session_state['active_batch_idx'],
+            format_func=lambda x: batch_labels[x]
+        )
+        # Update state if user overrides manually
+        st.session_state['active_batch_idx'] = selected_batch_idx
         
         loop_start = selected_batch_idx * batch_size
-        loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
-        execution_pool = unique_assets[loop_start:loop_end]
-
-        if st.button("🛰️ Pull & Process Selected Batch"):
-            st.info(f"Targeting {len(execution_pool)} items in {batch_labels[selected_batch_idx]}. Executing thread...")
-            
-            prog_bar = st.progress(0.0)
-            status_box = st.empty()
-            processed_results = []
-            
-            for idx, symbol in enumerate(execution_pool):
-                status_box.text(f"Extracting [{data_source}]: {symbol}")
-                
-                data_node = calculate_momentum_node(symbol, data_source, st.session_state['upstox_token'], exch)
-                processed_results.append(data_node)
-                prog_bar.progress((idx + 1) / len(execution_pool))
-                
-            status_box.success("Scan cluster limits hit successfully!")
-            
-            # 🟢 CONTINUOUS APPENDING LOGIC
-            new_df = pd.DataFrame(processed_results)
-            
-            # Pull old list, combine with new, and remove duplicates keeping the newest data
-            combined_df = pd.concat([st.session_state['scanned_df'], new_df])
-            combined_df.drop_duplicates(subset=["Symbol"], keep='last', inplace=True)
-            
-            # Save the extended list back to session state
-            st.session_state['scanned_df'] = combined_df
-
-    # --- TAB 2: DATABASE ---
-    with tab_db:
-        st.markdown("<div class='slbl'>Database Grid</div>", unsafe_allow_html=True)
-        
-        if st.session_state['scanned_df'].empty:
-            st.info("No scanned assets in registry. Go to Tab 1 and click the 'Process' button.")
-        else:
-            col_db1, col_db2 = st.columns([5, 1])
-            with col_db1:
-                st.write(f"📊 Currently holding **{len(st.session_state['scanned_df'])}** unique processed assets.")
-            with col_db2:
-                # Button to clear session memory
-                if st.button("🗑️ Clear Database"):
-                    st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
-                    st.rerun()
-
-            df_full = st.session_state['scanned_df']
-            st.dataframe(df_full.sort_values(by='Symbol').reset_index(drop=True), use_container_width=True)
-
-    # --- TAB 3: MOMENTUM STRATEGY HUB ---
-    with tab_momentum:
-        st.markdown("<div class='slbl'>Momentum Strategy Hub</div>", unsafe_allow_html=True)
-        if st.session_state['scanned_df'].empty:
-            st.info("Database empty. You must process stocks on Tab 1 first.")
-        else:
-            df_full = st.session_state['scanned_df']
-            perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')].to_dict('records')
-            other_results = df_full[~((df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT'))].to_dict('records')
-            
-            st.markdown("<div class='group-header'>🔥 Group 1: Perfect Momentum Picks</div>", unsafe_allow_html=True)
-            if perfect_hits:
-                for r in perfect_hits:
-                    st.markdown(f"""
-                    <div class="scard hit">
-                        <div class="ribbon">🔥 MOMENTUM PICK</div>
-                        <div class="ch"><div class="sym">{r['Symbol']}</div><div class="live-px">₹{r['Live Price']}</div></div>
-                        <div class="mgrid">
-                            <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['EPS Accel']}</div></div>
-                            <div class="met"><div class="ml">RS RESILIENT</div><div class="mv">✅ YES</div></div>
-                            <div class="met"><div class="ml">21MA BUY ZONE</div><div class="mv">🔥 HIT</div></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("No assets met all calculated parameters in this cluster.")
-            
-            st.markdown("<div class='group-header'>📊 Group 2: Other Scanned Assets</div>", unsafe_allow_html=True)
-            for r in other_results:
-                st.markdown(f"""
-                <div class="scard">
-                    <div class="ch"><div class="sym">{r['Symbol']}</div><div class="live-px">₹{r['Live Price']}</div></div>
-                    <div class="mgrid">
-                        <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['EPS Accel']}</div></div>
-                        <div class="met"><div class="ml">RS RESILIENT</div><div class="mv">{r['RS Resilient']}</div></div>
-                        <div class="met"><div class="ml">21MA Buy Zone</div><div class="mv">{r['21MA Buy Zone']}</div></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+        loop_end
