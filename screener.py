@@ -238,9 +238,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-       tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs([
-        "Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"
-    ])
+    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap" ])
 
 
     # --- TAB 1: SCREENER ---
