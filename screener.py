@@ -6,6 +6,9 @@ Tab 2: Master Ledger Database that continuously appends results
 Tab 3: Clustered Momentum Results Grid
 Tab 4: Momentum Picks with Interactive Candlestick Charts
 Tab 5: Bulletproof Sector Heatmap Grid
+
+INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
+RUN:      streamlit run screener.py
 """
 
 import io
@@ -243,7 +246,6 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
         info = stock.info
         if "sector" in info and info["sector"]:
             res["Sector"] = info["sector"]
-            
         if "forwardEps" in info and "trailingEps" in info:
             if info["forwardEps"] is not None and info["trailingEps"] is not None:
                 res["EPS Accel"] = "✅ Yes" if info["forwardEps"] > info["trailingEps"] else "❌ No"
@@ -261,9 +263,11 @@ def main():
     if 'scanned_df' not in st.session_state:
         st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
     
-    # Track the active batch across refreshes
     if 'active_batch_idx' not in st.session_state:
         st.session_state['active_batch_idx'] = 0
+        
+    if 'auto_run' not in st.session_state:
+        st.session_state['auto_run'] = False
 
     st.markdown("""
     <div class='hdr'>
@@ -328,15 +332,13 @@ def main():
             end = min((i + 1) * batch_size, total_assets)
             batch_labels.append(f"Batch {i+1}: Stocks {start+1} to {end}")
             
-        # 🟢 STEP 1: Link dropdown directly to session state
         selected_batch_idx = st.selectbox(
             "Select Asset Cluster to Process", 
             range(num_batches), 
             index=st.session_state['active_batch_idx'],
             format_func=lambda x: batch_labels[x]
         )
-        # Update state if user overrides manually
         st.session_state['active_batch_idx'] = selected_batch_idx
         
         loop_start = selected_batch_idx * batch_size
-        loop_end
+        loop_end = min((selected_batch_
