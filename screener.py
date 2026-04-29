@@ -20,8 +20,8 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & FALLBACK SECTOR MAP
 # ===========================================================================
-UPSTOX_BASE  = "https://upstox.com"
-UPSTOX_CDN_CSV = "https://upstox.com"
+UPSTOX_BASE  = "https://api.upstox.com/v2"
+UPSTOX_CDN_CSV = "https://api.upstox.com/v2"
 
 # Hardcoded index asset mappings preserved for manual pool overrides
 INDICES_MAP = {
