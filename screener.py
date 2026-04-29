@@ -134,7 +134,7 @@ def main():
 
     with tab_screener:
         token_input = st.text_input("Enter Upstox Access Token (v2)", type="password")
-            if token_input:
+        if token_input:
                 if check_upstox_token(token_input): st.success("Upstox Status: Connected!")
             else: st.error("Upstox Status: Invalid Token.")
             
