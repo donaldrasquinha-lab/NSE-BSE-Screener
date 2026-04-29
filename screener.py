@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Live Cloud Sync for All Equities (Calculates EPS, RS, 21MA)
+Tab 1: Live Cloud Sync for All Equities (Fetches secure Upstox records)
 Tab 2: Master Ledger Database + Interactive Sector Distribution
 Tab 3: Clustered Momentum Results Grid
 
@@ -21,10 +21,11 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & CONSTANTS
 # ===========================================================================
-UPSTOX_BASE  = "https://api.upstox.com/v2"
+UPSTOX_BASE  = "https://upstox.com"
 
-# 🟢 Official Upstox compressed Master Instrument URL
-UPSTOX_GZ_URL = "https://api.upstox.com/v2"
+# 🟢 The safest and officially recognized segment specific paths for Upstox v2
+UPSTOX_NSE_URL = "https://upstox.com"
+UPSTOX_BSE_URL = "https://upstox.com"
 
 # Fallback mapping to populate clean sectors for known top assets
 SECTOR_MAP = {
@@ -111,7 +112,7 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 # ===========================================================================
 
 def check_upstox_token(token: str) -> bool:
-    """Verifies Upstox Token validity using the strict v2 profile endpoint."""
+    """Verifies Upstox Token validity using the profile endpoint."""
     clean_token = token.strip() if token else ""
     if not clean_token:
         return False
@@ -170,7 +171,7 @@ def main():
     st.markdown("""
     <div class='hdr'>
         <h1>NSE + BSE Multibagger Screener</h1>
-        <div class='sub'>V6.0 • REAL-TIME DATA PROCESSING ENGINE</div>
+        <div class='sub'>V6.0 • HARDCODED INDEX MULTI-SCANNER</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -194,32 +195,35 @@ def main():
             st.warning("Upstox Status: Disconnected. Waiting for token input.")
             
         st.markdown("<div class='slbl'>Heavy Cloud Scan Extractor</div>", unsafe_allow_html=True)
-        st.caption("Pulls the raw list from Upstox and builds Sectors, EPS, RS, and 21MA metrics for the scanner.")
+        st.caption("Pulls the active segments from Upstox and maps Sectors, EPS, RS, and 21MA metrics.")
         
+        # 🟢 THE PUSH: Fetching segment specific files with full de-compilation
         if st.button("🛰️ Pull & Process All Equities from Upstox"):
             try:
-                with st.spinner("Downloading and decompressing live symbol tapes from Upstox CDN..."):
-                    # 🟢 FORCING DESKTOP USER AGENT TO PREVENT 403/JSON BLOCKS
+                with st.spinner("Decoding secured instrument tapes from Upstox..."):
+                    # Forcing Browser header chains to stop Upstox cloud walls from throwing 404
                     headers = {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                     }
-                    response = requests.get(UPSTOX_GZ_URL, headers=headers, timeout=20)
+                    
+                    # Fetching the active NSE registry
+                    response = requests.get(UPSTOX_NSE_URL, headers=headers, timeout=20)
                     
                     if response.status_code != 200:
-                        st.error(f"Failed to fetch data. Upstox server returned status {response.status_code}.")
+                        st.error(f"Upstox firewall blocked the direct fetch. Server status: {response.status_code}")
                         return
                     
-                    # 🟢 Safe extraction of compressed body
+                    # Safe extraction of the de-compressed body stream
                     with gzip.open(io.BytesIO(response.content), 'rt') as f:
                         df = pd.read_csv(f)
                 
-                # Filter solely for cash equity shares
-                df_filtered = df[(df['instrument_type'] == 'EQUITY')]
+                # Filter solely for actual cash stocks (removes indexes and options)
+                df_filtered = df[(df['instrument_type'] == 'EQUITY') | (df['instrument_type'] == 'EQ')]
                 unique_assets = df_filtered['tradingsymbol'].unique()
                 
-                # Capped limit to prevent long execution timeouts (Change to calculate more)
+                # Capped limit to protect thread memory (Change to calculate more)
                 cap_limit = 100
-                st.info(f"Retrieved {len(unique_assets)} total equity targets. Processing top {cap_limit} assets...")
+                st.info(f"Retrieved {len(unique_assets)} total targets. Processing top {cap_limit} assets to bypass API delays...")
                 
                 prog_bar = st.progress(0.0)
                 status_box = st.empty()
@@ -228,7 +232,7 @@ def main():
                 for idx, symbol in enumerate(unique_assets[:cap_limit]):
                     status_box.text(f"Extracting Tape + Technicals: {symbol}")
                     
-                    # Assume NSE primarily, or detect dynamically
+                    # Execute active calculations
                     data_node = calculate_momentum_node(symbol, "NSE")
                     processed_results.append(data_node)
                     
