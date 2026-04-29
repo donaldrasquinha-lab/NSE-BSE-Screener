@@ -359,4 +359,4 @@ def main():
                 st.dataframe(df_momentum.sort_values(by='Sector').reset_index(drop=True), width='stretch')
 
 if __name__ == "__main__":
-                 main()
+            main()
