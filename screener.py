@@ -24,7 +24,7 @@ from plotly.subplots import make_subplots
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
-UPSTOX_BASE = "https://upstox.com"
+UPSTOX_BASE = "https://api.upstox.com/v2"
 
 BSE_500_TICKERS = (
     "GRSE,ETERNAL,RELIANCE,BANDHANBNK,VEDL,MAZDOCK,HDFCBANK,SUNPHARMA,COCHINSHIP,CEATLTD,"
