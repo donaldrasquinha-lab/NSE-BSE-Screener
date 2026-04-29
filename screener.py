@@ -8,7 +8,7 @@ Tab 4: Momentum Picks with Interactive Charts
 Tab 5: Sector Heatmap Grid
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
-RUN:      streamlit run screener_st.py
+RUN:      streamlit run screener.py
 """
 
 import io
@@ -24,7 +24,7 @@ from plotly.subplots import make_subplots
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
-UPSTOX_BASE = "https://api.upstox.com/v2"
+UPSTOX_BASE = "https://upstox.com"
 
 BSE_500_TICKERS = (
     "GRSE,ETERNAL,RELIANCE,BANDHANBNK,VEDL,MAZDOCK,HDFCBANK,SUNPHARMA,COCHINSHIP,CEATLTD,"
@@ -39,7 +39,7 @@ BSE_500_TICKERS = (
     "CANBK,GVT&D,ASHOKLEY,NHPC,TRENT,OIL,HDFCLIFE,HAL,WIPRO,OLAELEC,UNIONBANK,BRITANNIA,MAHABANK,"
     "TMCV,ABCAPITAL,NTPC,AWL,HAVELLS,POWERGRID,HINDCOPPER,HEROMOTOCO,YESBANK,SONACOMS,HFCL,"
     "NAUKRI,ABB,CDSL,JAINREC,KOTAKBANK,IDFCFIRSTB,AUROPHARMA,POLYCAB,KEI,BDL,TITAN,FEDERALBNK,"
-    "RVNL,ATHERENERG,APOLLOHOSP,NAVINFLUOR,SAPPHIRE,INDIANB,JKTYRE,TARIL,MAXHEALTH,COFORGE,IGL,"
+    "RVNL,ATHERENERG,APOLLOSP,NAVINFLUOR,SAPPHIRE,INDIANB,JKTYRE,TARIL,MAXHEALTH,COFORGE,IGL,"
     "EXIDEIND,JSWENERGY,PNB,GRASIM,MOTHERSON,FIVESTAR,RPOWER,HDFCAMC,POLICYBZR,IIFL,GLENMARK,"
     "CONCORDBIO,CGPOWER,LAURUSLABS,MRF,TEJASNET,MRPL,BLUESTARCO,ASTRAL,HYUNDAI,GAIL,PPLPHARMA,"
     "CUMMINSIND,APARINDS,IOC,GODREJPROP,MUTHOOTFIN,DLF,BANKBARODA,SBILIFE,HINDPETRO,SBICARD,"
@@ -372,14 +372,13 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-    # --- 🟢 NEW TAB 4: MOMENTUM HUB WITH CHARTS ---
+    # --- TAB 4: MOMENTUM HUB WITH CHARTS ---
     with tab_charts:
         st.markdown("<div class='slbl'>🎯 Active Momentum Executions</div>", unsafe_allow_html=True)
         if st.session_state['scanned_df'].empty:
             st.info("Database empty. You must process stocks on Tab 1 first.")
         else:
             df_full = st.session_state['scanned_df']
-            # Target exact hits
             perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')]
             
             if perfect_hits.empty:
@@ -387,7 +386,6 @@ def main():
             else:
                 st.write(f"Found **{len(perfect_hits)}** highly optimized momentum setups:")
                 
-                # Fetching chart arrays using isolated state
                 for idx, row in perfect_hits.iterrows():
                     symbol = row['Symbol']
                     live_px = row['Live Price']
@@ -402,7 +400,6 @@ def main():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Fetch price history specifically for the candlestick draw
                     try:
                         ticker_data = yf.Ticker(f"{symbol}.NS")
                         hist_6m = ticker_data.history(period="6m")
@@ -410,7 +407,6 @@ def main():
                         if not hist_6m.empty:
                             hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()
                             
-                            # Build Candle chart
                             fig = go.Figure(data=[
                                 go.Candlestick(
                                     x=hist_6m.index,
@@ -431,4 +427,8 @@ def main():
                             
                             fig.update_layout(
                                 xaxis_rangeslider_visible=False,
-                                paper_bgcolor='rgba(0,0,0,
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                font=dict(color='#a8b4cc'),
+                                xaxis=dict(gridcolor='#1e2740'),
+                                yaxis=dict(gridcolor='#1e2740
