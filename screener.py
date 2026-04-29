@@ -293,7 +293,7 @@ def main():
             
         st.markdown("<div class='slbl'>Heavy Cloud Scan Extractor</div>", unsafe_allow_html=True)
         
-                col_s1, col_s2 = st.columns(2)
+        col_s1, col_s2 = st.columns(2)
         with col_s1:
             data_source = st.selectbox("Select Price/Data Source", ["Yahoo Finance", "Upstox"])
         with col_s2:
