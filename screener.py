@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Upstox Hub with Token Status (Refined for API v2)
-Tab 2: Database Tab populated with Sector Analytics and Plots
-Tab 3: Momentum Strategy Hub with Priority Sorting & Ribbon Banners
+Tab 1: Upstox Token + Mass Index Download
+Tab 2: Master Instrument Grid Sorted by Sector + Graph
+Tab 3: Momentum Strategy Hub with Grouped Layouts
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
@@ -24,7 +24,7 @@ from plotly.subplots import make_subplots
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES & SECTOR MAP
 # ===========================================================================
-UPSTOX_BASE  = "https://api.upstox.com/v2"
+UPSTOX_BASE  = "https://upstox.com"
 
 # Hardcoded index asset mappings for standard and momentum scanning
 INDICES_MAP = {
@@ -47,6 +47,7 @@ SECTOR_MAP = {
     "BANKBARODA": "Financial Services", "IDFCFIRSTB": "Financial Services", "AUBANK": "Financial Services",
     "CHOLAFIN": "Financial Services", "HDFCLIFE": "Financial Services", "RECLTD": "Financial Services",
     "PFC": "Financial Services", "MUTHOOTFIN": "Financial Services", "LICHSGFIN": "Financial Services",
+    "SBICARD": "Financial Services", "HDFCAMC": "Financial Services", "ICICIGI": "Financial Services", "ICICIPRULI": "Financial Services",
     # IT
     "TCS": "IT", "INFY": "IT", "HCLTECH": "IT", "TECHM": "IT", "WIPRO": "IT", "LTIM": "IT",
     # Energy / Oil & Gas
@@ -66,7 +67,7 @@ SECTOR_MAP = {
     # Construction / Infrastructure
     "LT": "Infrastructure", "ADANIPORTS": "Infrastructure",
     # Consumer Durables / Others
-    "TITAN": "Consumer Durables", "ASIANPAINT": "Paints", "ULTRACEMCO": "Cement", "GRASIM": "Cement"
+    "TITAN": "Consumer Durables", "ASIANPAINT": "Paints", "ULTRACEMCO": "Cement", "GRASIM": "Cement", "UPL": "Chemicals"
 }
 
 # ===========================================================================
@@ -141,6 +142,12 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
   padding:3px 8px;border-radius:4px;letter-spacing:1px;
   box-shadow:0 0 10px rgba(16,185,129,0.3);
 }
+
+/* Flex Grouping */
+.group-header {
+  font-family: var(--sans); font-size: 1.1rem; font-weight: 700; color: #fff;
+  margin: 15px 0 10px 0; border-bottom: 1px solid var(--border); padding-bottom: 5px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -149,10 +156,7 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 # ===========================================================================
 
 def check_upstox_token(token: str) -> bool:
-    """
-    Verifies Upstox Token validity by pinging the profile endpoint.
-    Handles Bearer spacing and empty edge cases explicitly for v2 APIs.
-    """
+    """Verifies Upstox Token validity by pinging the profile endpoint."""
     clean_token = token.strip() if token else ""
     if not clean_token:
         return False
@@ -215,8 +219,11 @@ def analyze_momentum_setup(symbol: str, exchange: str = "NSE") -> dict:
 # ===========================================================================
 
 def main():
+    # Initialize shared states
     if 'scanned_df' not in st.session_state:
         st.session_state['scanned_df'] = pd.DataFrame()
+    if 'master_instruments' not in st.session_state:
+        st.session_state['master_instruments'] = pd.DataFrame()
 
     st.markdown("""
     <div class='hdr'>
@@ -227,7 +234,7 @@ def main():
 
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
-    # --- TAB 1: SCREENER (Now handles Upstox v2) ---
+    # --- TAB 1: SCREENER (Now features mass download) ---
     with tab_screener:
         st.markdown("<div class='slbl'>Upstox API Authentication</div>", unsafe_allow_html=True)
         if 'upstox_token' not in st.session_state:
@@ -239,63 +246,89 @@ def main():
             st.session_state['upstox_token'] = token_input
             is_valid = check_upstox_token(token_input)
             if is_valid:
-                st.success("Upstox Status: Connected successfully! Active token loaded.")
+                st.success("Upstox Status: Connected successfully!")
             else:
-                st.error("Upstox Status: Disconnected. Invalid or expired token.")
+                st.error("Upstox Status: Disconnected. Invalid token.")
         else:
             st.warning("Upstox Status: Disconnected. Waiting for token input.")
             
         st.markdown("<div class='slbl'>Market Scanner Control</div>", unsafe_allow_html=True)
-        st.caption("Standard instrument operations. Switch to Tab 3 for heavily analyzed Momentum screening.")
+        
+        # Massive download trigger
+        if st.button("📥 Download & Map All Index Instruments"):
+            # Aggregate all unique symbols from hardcoded indices
+            all_assets = []
+            for k, v in INDICES_MAP.items():
+                all_assets.extend(v.split(","))
+            unique_assets = list(set(all_assets))
+            
+            p_bar = st.progress(0.0)
+            s_text = st.empty()
+            processed_data = []
+            
+            for idx, symbol in enumerate(unique_assets):
+                s_text.text(f"Indexing master profile for: {symbol}")
+                # Assign sector or fallback
+                sector_str = SECTOR_MAP.get(symbol, "Other / Diversified")
+                processed_data.append({
+                    "Symbol": symbol,
+                    "Sector": sector_str
+                })
+                p_bar.progress((idx + 1) / len(unique_assets))
+                
+            s_text.success(f"Instrument cache built! {len(unique_assets)} assets loaded to Database tab.")
+            st.session_state['master_instruments'] = pd.DataFrame(processed_data)
 
     # --- TAB 2: DATABASE ---
     with tab_db:
-        st.markdown("<div class='slbl'>Database & Sector Analytics</div>", unsafe_allow_html=True)
+        st.markdown("<div class='slbl'>Database & Master Asset Hub</div>", unsafe_allow_html=True)
         
-        if st.session_state['scanned_df'].empty:
-            st.info("No scan data available yet. Please run a 'Momentum Scan' on Tab 3 to populate this view.")
+        # Toggle between master asset list and real-time scanned list
+        db_source = st.radio("Select Database Layer to View", ["Scanned Active List", "Master Instrument Inventory"])
+        
+        if db_source == "Scanned Active List":
+            if st.session_state['scanned_df'].empty:
+                st.info("No live scan data available. Run a 'Momentum Scan' on Tab 3 to populate this grid.")
+            else:
+                df_full = st.session_state['scanned_df']
+                sector_counts = df_full['Sector'].value_counts().reset_index()
+                sector_counts.columns = ['Sector', 'Count']
+                
+                fig = go.Figure(data=[go.Bar(
+                    x=sector_counts['Sector'], y=sector_counts['Count'],
+                    marker_color='#38bdf8', text=sector_counts['Count'], textposition='auto',
+                )])
+                fig.update_layout(
+                    title="<b>Active Volume by Sector</b>", title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
+                    xaxis=dict(gridcolor='#1e2740'), yaxis=dict(gridcolor='#1e2740'),
+                    height=300, margin=dict(l=10, r=10, t=50, b=10)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("<div class='slbl'>Scanned Portfolio Data</div>", unsafe_allow_html=True)
+                sorted_df = df_full.sort_values(by='Sector').reset_index(drop=True)
+                st.dataframe(
+                    sorted_df.style.map(
+                        lambda v: 'color: #34d399; font-weight: bold;' if v in ['🔥 HIT', '✅ YES'] else '',
+                        subset=["21MA BUY ZONE", "RS RESILIENT"]
+                    ), use_container_width=True
+                )
+                
         else:
-            df_full = st.session_state['scanned_df']
-            sector_counts = df_full['Sector'].value_counts().reset_index()
-            sector_counts.columns = ['Sector', 'Count']
-            
-            fig = go.Figure(data=[go.Bar(
-                x=sector_counts['Sector'],
-                y=sector_counts['Count'],
-                marker_color='#38bdf8',
-                text=sector_counts['Count'],
-                textposition='auto',
-            )])
-            
-            fig.update_layout(
-                title="<b>Volume of Scanned Stocks by Sector</b>",
-                title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
-                xaxis=dict(gridcolor='#1e2740'),
-                yaxis=dict(gridcolor='#1e2740'),
-                height=350,
-                margin=dict(l=10, r=10, t=50, b=10)
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            st.markdown("<div class='slbl'>Scanned Portfolio Data (Sorted by Sector)</div>", unsafe_allow_html=True)
-            sorted_df = df_full.sort_values(by='Sector').reset_index(drop=True)
-            
-            st.dataframe(
-                sorted_df.style.map(
-                    lambda v: 'color: #34d399; font-weight: bold;' if v in ['🔥 HIT', '✅ YES'] else '',
-                    subset=["21MA BUY ZONE", "RS RESILIENT"]
-                ),
-                use_container_width=True
-            )
+            # Viewing the full catalog downloaded on Tab 1
+            if st.session_state['master_instruments'].empty:
+                st.info("No master instruments loaded. Go to Tab 1 and click 'Download & Map All Index Instruments'.")
+            else:
+                df_master = st.session_state['master_instruments']
+                st.markdown("<div class='slbl'>Full Catalog (Sorted by Sector)</div>", unsafe_allow_html=True)
+                st.dataframe(df_master.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
-    # --- TAB 3: MOMENTUM STRATEGY HUB ---
+    # --- TAB 3: MOMENTUM STRATEGY HUB (Grouped layout) ---
     with tab_momentum:
         st.markdown("<div class='slbl'>Momentum Strategy Hub</div>", unsafe_allow_html=True)
-        st.caption("Candidates matching all criteria will be prioritized at the top with a ribbon banner.")
+        st.caption("Candidates matching all criteria will be grouped inside a priority box on the top.")
         
         indices_list = list(INDICES_MAP.keys())
         indices_list.insert(0, "All Indices (Mass Scan)")
@@ -371,27 +404,32 @@ def main():
                 else:
                     other_results.append(r)
             
-            st.markdown("<div class='slbl'>Outcome Matrix (Qualified Fits Priority)</div>", unsafe_allow_html=True)
+            # --- GROUPED LAYOUT EXECUTION ---
             
-            # Display perfect hits with the green ribbon banner first
-            for r in perfect_hits:
-                st.markdown(f"""
-                <div class="scard hit">
-                    <div class="ribbon">🔥 MOMENTUM PICK</div>
-                    <div class="ch">
-                        <div class="sym">{r['symbol']}</div>
-                        <div class="live-px">₹{r['live_px']}</div>
+            # 1. Top Section: Grouped Perfect Fits
+            st.markdown("<div class='group-header'>🔥 Momentum Picks (Perfect Filters)</div>", unsafe_allow_html=True)
+            if perfect_hits:
+                for r in perfect_hits:
+                    st.markdown(f"""
+                    <div class="scard hit">
+                        <div class="ribbon">🔥 MOMENTUM PICK</div>
+                        <div class="ch">
+                            <div class="sym">{r['symbol']}</div>
+                            <div class="live-px">₹{r['live_px']}</div>
+                        </div>
+                        <div class="mgrid">
+                            <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['eps_accel']}</div></div>
+                            <div class="met"><div class="ml">SURPRISE</div><div class="mv">{r['surprise']}</div></div>
+                            <div class="met"><div class="ml">RS RESILIENT</div><div class="mv">✅ YES</div></div>
+                            <div class="met"><div class="ml">21MA BUY ZONE</div><div class="mv">🔥 HIT</div></div>
+                        </div>
                     </div>
-                    <div class="mgrid">
-                        <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['eps_accel']}</div></div>
-                        <div class="met"><div class="ml">SURPRISE</div><div class="mv">{r['surprise']}</div></div>
-                        <div class="met"><div class="ml">RS RESILIENT</div><div class="mv">✅ YES</div></div>
-                        <div class="met"><div class="ml">21MA BUY ZONE</div><div class="mv">🔥 HIT</div></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No candidates strictly matched all criteria in this execution run.")
             
-            # Display the rest of the list without the banner
+            # 2. Bottom Section: Grouped Normal Results
+            st.markdown("<div class='group-header'>📊 Monitored Asset Pool</div>", unsafe_allow_html=True)
             for r in other_results:
                 st.markdown(f"""
                 <div class="scard">
@@ -412,7 +450,7 @@ def main():
             st.markdown(f"""
             <div class='kpis'>
                 <div class='kpi'><div class='v csky'>{len(tickers_list)}</div><div class='l'>Tracked</div></div>
-                <div class='kpi'><div class='v csage'>{len(perfect_hits)}</div><div class='l'>Strong Filters</div></div>
+                <div class='kpi'><div class='v csage'>{len(perfect_hits)}</div><div class='l'>Qualified Fits</div></div>
             </div>
             """, unsafe_allow_html=True)
 
