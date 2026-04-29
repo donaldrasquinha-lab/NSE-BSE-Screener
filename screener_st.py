@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
+Features full styling, database tabs, and a live Momentum Strategy hub.
 Includes Hardcoded Index Selection for Nifty, Bank Nifty, Fin Nifty, and Sensex
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
@@ -20,10 +21,18 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # ===========================================================================
-#  HARDCODED INDEX DICTIONARY
+#  CONFIG & HARDCODED INDICES
 # ===========================================================================
+UPSTOX_BASE  = "https://upstox.com"
+DB_PATH          = Path("universe.db")
+FUND_PATH        = Path("fundamentals.json")
+INST_CSV_PATH    = Path("instruments.csv")         
+INST_GZ_PATH     = Path("instruments_raw.csv.gz")  
+INST_META_PATH   = Path("instruments_meta.json")   
+
+# Hardcoded index asset mappings
 INDICES_MAP = {
-    "Nifty 50": "RELIANCE,TCS,HDFCBANK,ICICIBANK,INFY,BHARTIARTL,HINDUNILVR,ITC,SBI,LTIM,ADANIENT,ADANIPORTS,ASIANPAINT,AXISBANK,BAJAJ-AUTO,BAJFINANCE,BAJAJFINSV,BPCL,BRITANNIA,CIPLA,COALINDIA,DIVISLAB,DRREDDY,EICHERMOT,GRASIM,HCLTECH,HEROMOTOCO,HINDALCO,INDUSINDBK,JSWSTEEL,KOTAKBANK,LT,M&M,MARUTI,NESTLEIND,NTPC,ONGC,POWERGRID,SBILIFE,SUNPHARMA,TATACONSUM,TATAMOTORS,TATASTEEL,TECHM,TITAN,ULTRACEMCO,UPL,WIPRO,SHRIRAMFIN,GRASIM",
+    "Nifty 50": "RELIANCE,TCS,HDFCBANK,ICICIBANK,INFY,BHARTIARTL,HINDUNILVR,ITC,SBI,LTIM,ADANIENT,ADANIPORTS,ASIANPAINT,AXISBANK,BAJAJ-AUTO,BAJFINANCE,BAJAJFINSV,BPCL,BRITANNIA,CIPLA,COALINDIA,DIVISLAB,DRREDDY,EICHERMOT,GRASIM,HCLTECH,HEROMOTOCO,HINDALCO,INDUSINDBK,JSWSTEEL,KOTAKBANK,LT,M&M,MARUTI,NESTLEIND,NTPC,ONGC,POWERGRID,SBILIFE,SUNPHARMA,TATACONSUM,TATAMOTORS,TATASTEEL,TECHM,TITAN,ULTRACEMCO,UPL,WIPRO,SHRIRAMFIN",
     
     "Bank Nifty": "HDFCBANK,ICICIBANK,SBI,AXISBANK,KOTAKBANK,INDUSINDBK,PNB,FEDERALBNK,BANKBARODA,IDFCFIRSTB,AUBANK,CANBK",
     
@@ -33,7 +42,7 @@ INDICES_MAP = {
 }
 
 # ===========================================================================
-#  CSS
+#  CSS STYLING & PAGE SETUP
 # ===========================================================================
 st.set_page_config(page_title="NSE+BSE Screener", page_icon="🚀", layout="wide", initial_sidebar_state="expanded")
 
@@ -59,15 +68,23 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
   border-radius:8px!important;font-family:var(--sans)!important;font-weight:600!important;transition:all .18s!important;}
 .stButton>button:hover{background:linear-gradient(135deg,#1e4a8a,#1432a0)!important;
   box-shadow:0 4px 20px rgba(56,189,248,.2)!important;transform:translateY(-1px)!important;}
-.stTextInput>div>div>input,.stNumberInput>div>div>input{
+.stButton>button:disabled{opacity:.4!important;transform:none!important;}
+.stTextInput>div>div>input,.stNumberInput>div>div>input,.stTextArea>div>div>textarea{
   background:#131928!important;border:1px solid #253050!important;color:var(--t1)!important;
   border-radius:7px!important;font-family:var(--mono)!important;}
 .stSelectbox>div>div{background:#131928!important;border-color:#253050!important;}
 .stTabs [role="tablist"]{background:#0f1320;border:1px solid #1e2740;border-radius:10px;padding:3px;}
 .stTabs [role="tab"]{color:#5c6a88!important;border-radius:7px!important;font-family:var(--sans)!important;font-weight:600!important;}
 .stTabs [aria-selected="true"]{background:#131928!important;color:var(--sky)!important;}
+.stDataFrame{border-radius:10px!important;overflow:hidden;}
+div[data-testid="stInfo"]{background:rgba(56,189,248,.07)!important;border:1px solid rgba(56,189,248,.2)!important;}
+div[data-testid="stSuccess"]{background:rgba(52,211,153,.07)!important;border:1px solid rgba(52,211,153,.2)!important;}
+div[data-testid="stWarning"]{background:rgba(251,191,36,.07)!important;border:1px solid rgba(251,191,36,.2)!important;}
+div[data-testid="stError"]{background:rgba(248,113,113,.07)!important;border:1px solid rgba(248,113,113,.2)!important;}
 .stProgress>div>div{background:linear-gradient(90deg,var(--sky),var(--sage))!important;}
 #MainMenu,footer,header{visibility:hidden!important;}
+div[data-baseweb="slider"]>div{background:#253050!important;}
+div[data-baseweb="slider"]>div>div{background:var(--sky)!important;}
 
 .hdr{background:linear-gradient(135deg,#0e1525,#131928);border:1px solid #1e2740;
   border-radius:12px;padding:20px 26px 16px;margin-bottom:18px;position:relative;overflow:hidden;}
@@ -101,7 +118,7 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 # ===========================================================================
 
 def analyze_momentum_setup(symbol: str, exchange: str = "NSE") -> dict:
-    """Calculates price technicals and pulls rough fundamentals safely."""
+    """Calculates price technicals and pulls rough fundamentals safely using yfinance."""
     yf_symbol = f"{symbol}.NS" if exchange == "NSE" else f"{symbol}.BO"
     res = {
         "symbol": symbol, "live_px": 0.0, "ema_21": 0.0, 
@@ -154,23 +171,28 @@ def main():
 
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
+    # --- TAB 1: SCREENER (Base placeholder) ---
     with tab_screener:
-        st.info("Standard Screener Tab")
+        st.markdown("<div class='slbl'>Standard Screener</div>", unsafe_allow_html=True)
+        st.info("Custom Upstox executions and filter parameters operate in this tab.")
 
+    # --- TAB 2: DATABASE (Base placeholder) ---
     with tab_db:
-        st.info("Database Tab")
+        st.markdown("<div class='slbl'>Database Execution</div>", unsafe_allow_html=True)
+        st.info("Manage instrument mappings and database tables here.")
 
     # --- TAB 3: MOMENTUM STRATEGY HUB ---
     with tab_momentum:
         st.markdown("<div class='slbl'>Momentum Strategy Hub</div>", unsafe_allow_html=True)
+        st.caption("Auto-checks candidates against defined EPS, RS, and 21EMA rules.")
         
-        # 1. Option Selector for Indices
+        # Option Selector for hardcoded indices
         selected_index = st.selectbox("Select Target Index to Scan", list(INDICES_MAP.keys()))
         
-        # Auto-fills the text area based on the drop-down option chosen above
+        # Text block actively syncs with whatever dropdown was triggered
         m_tickers = st.text_area("Asset Pool Mapping (Editable):", INDICES_MAP[selected_index], height=120)
         
-        # Exchange Mapping based on Index Selection
+        # Smart assignment based on selected index
         default_exch = "BSE" if selected_index == "Sensex" else "NSE"
         
         col1, col2 = st.columns(2)
@@ -184,28 +206,32 @@ def main():
             tickers_list = [x.strip().upper() for x in m_tickers.replace('\n', ',').split(",") if x.strip()]
             
             if not tickers_list:
-                st.error("Invalid list of components.")
+                st.error("No valid ticker payload found.")
                 return
                 
-            st.write(f"Scouring the chain for {len(tickers_list)} entries...")
+            st.write(f"Routing data requests for {len(tickers_list)} chain targets...")
             
+            # Action and progression trackers
             prog_bar = st.progress(0.0)
             status_text = st.empty()
             momentum_results = []
             
             for idx, ticker in enumerate(tickers_list):
-                status_text.text(f"Fetching tape: {ticker}...")
+                status_text.text(f"Fetching structural tape: {ticker}...")
                 m_data = analyze_momentum_setup(ticker, m_exch)
                 momentum_results.append(m_data)
+                
+                # Update progress bar
                 prog_bar.progress((idx + 1) / len(tickers_list))
                 
-            status_text.success("Scan protocols filled!")
-            st.markdown("<div class='slbl'>Grid Matrix Outcomes</div>", unsafe_allow_html=True)
+            status_text.success("Scan network execution finished!")
+            
+            st.markdown("<div class='slbl'>Outcome Matrix Matrix</div>", unsafe_allow_html=True)
             
             hits_count = 0
             for r in momentum_results:
                 if r["live_px"] == 0.0:
-                    continue
+                    continue  # Protects against bad symbols
                     
                 is_hit = r["rs_resilient"] and r["buy_zone"]
                 card_class = "scard hit" if is_hit else "scard"
@@ -218,15 +244,28 @@ def main():
                         <div class="live-px">₹{r['live_px']}</div>
                     </div>
                     <div class="mgrid">
-                        <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['eps_accel']}</div></div>
-                        <div class="met"><div class="ml">SURPRISE</div><div class="mv">{r['surprise']}</div></div>
-                        <div class="met"><div class="ml">RS RESILIENT</div><div class="mv">{'✅ YES' if r['rs_resilient'] else '❌ NO'}</div></div>
-                        <div class="met"><div class="ml">21MA BUY ZONE</div><div class="mv">{'🔥 HIT' if r['buy_zone'] else '❌ OUTSIDE'}</div></div>
+                        <div class="met">
+                            <div class="ml">EPS ACCEL</div>
+                            <div class="mv">{r['eps_accel']}</div>
+                        </div>
+                        <div class="met">
+                            <div class="ml">SURPRISE</div>
+                            <div class="mv">{r['surprise']}</div>
+                        </div>
+                        <div class="met">
+                            <div class="ml">RS RESILIENT</div>
+                            <div class="mv">{'✅ YES' if r['rs_resilient'] else '❌ NO'}</div>
+                        </div>
+                        <div class="met">
+                            <div class="ml">21MA BUY ZONE</div>
+                            <div class="mv">{'🔥 HIT' if r['buy_zone'] else '❌ OUTSIDE'}</div>
+                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-            st.markdown("<div class='slbl'>Matrix Telemetry</div>", unsafe_allow_html=True)
+            # Render visual results count 
+            st.markdown("<div class='slbl'>Active Telemetry</div>", unsafe_allow_html=True)
             st.markdown(f"""
             <div class='kpis'>
                 <div class='kpi'><div class='v csky'>{len(tickers_list)}</div><div class='l'>Tracked</div></div>
