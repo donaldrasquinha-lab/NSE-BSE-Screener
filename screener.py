@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Live Cloud Sync with Upstox v2 and Yahoo toggles
-Tab 2: Master Ledger Database for hardcoded Nifty 500 & BSE 500
-Tab 3: Clustered Momentum Results Grid
+Tab 1: Cloud Sync supporting Yahoo Finance & Upstox v2.0
+Tab 2: Master Ledger Grid for Hardcoded 500 Target Portfolios
+Tab 3: Clustered Momentum Picks & Asset Pools
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
 """
 
 import io
-import gzip
 import requests
 import numpy  as np
 import pandas as pd
@@ -23,24 +22,67 @@ import plotly.graph_objects as go
 # ===========================================================================
 UPSTOX_BASE = "https://api.upstox.com/v2"
 
-# 🟢 Hardcoded complete ticker pools for mass scanning without network failures
-# Formatted as pure exchange symbols.
-NIFTY_500_TICKERS = "RELIANCE,TCS,HDFCBANK,ICICIBANK,INFY,BHARTIARTL,HINDUNILVR,ITC,SBIN,LTIM,ADANIENT,ADANIPORTS,ASIANPAINT,AXISBANK,BAJAJ-AUTO,BAJFINANCE,BAJAJFINSV,BPCL,BRITANNIA,CIPLA,COALINDIA,DIVISLAB,DRREDDY,EICHERMOT,GRASIM,HCLTECH,HEROMOTOCO,HINDALCO,INDUSINDBK,JSWSTEEL,KOTAKBANK,LT,M&M,MARUTI,NESTLEIND,NTPC,ONGC,POWERGRID,SBILIFE,SUNPHARMA,TATACONSUM,TATAMOTORS,TATASTEEL,TECHM,TITAN,ULTRACEMCO,UPL,WIPRO,360ONE,3MINDIA,ABB,ACC,AIAENG,APLAPOLLO,AUBANK,AETHER,AFFLE,AJANTPHARM,APLLTD,ALKEM,ALKYLAMINE,ALLCARGO,ALOKINDS,AMBER,AMBUJACEM,ANANTRAJ,ANGELONE,APARINDS,APOLLOHOSP,APOLLOTYRE,APTUS,ARE&M,ASAHIINDIA,ASHOKLEY,ASIANPAINT,ASTERDM,ASTRAL,ATUL,AUROPHARMA,AVANTIFEED,DMART,BEML,BLS,BSE,BALAMINES,BALKRISIND,BALRAMCHIN,BANDHANBNK,BANKBARODA,BANKINDIA,MAHABANK,BATAINDIA,BAYERCROP,BERGEPAINT,BDL,BEL,BHARATFORG,BHEL,BIOCON,BIRLACORPN,BSOFT,BLUEDART,BORORENEW,BOSCHLTD,CAMPUS,CESC,CGPOWER,CIEINDIA,CRISIL,CSBBANK,CAMPUS,CANFINHOME,CANBK,CAPLIPOINT,CGCL,CARBORUNIV,CASTROLIND,CEATLTD,CENTRALBK,CDSL,CENTURYPLY,CENTURYTEX,CHAMBLFERT,CHALET,CHOLAFIN,CHOLAHLDNG,CUB,CIPLA,CLEAN,COALINDIA,COCHINSHIP,COFORGE,COLPAL,CONCOR,COROMANDEL,CRAFTSMAN,CREDITACC,CROMPTON,CUMMINSIND,CYIENT,DCMSHRIRAM,DLF,DABUR,DALBHARAT,DEEPAKFERT,DEEPAKNTR,DELHIVERY,DEVYANI,DIXON,DONEAR,DRREDDY,EIDPARRY,EIHOTEL,EPL,EASEMYTRIP,EICHERMOT,ELECON,EMAMILTD,ENDURANCE,ENGINERSIN,ERIS,ESCORTS,EXIDEIND,FDC,FSNKYS,FEDERALBNK,FACT,FINEORG,FINCABLES,FINPIPE,FSL,FORTIS,GRINFRA,GAIL,GLS,GMRINFRA,GEPIL,GET&D,GHCL,GICRE,GIPCL,GLAXO,GLENMARK,GODREJAGRO,GODREJCP,GODREJPROP,GRANULES,GRAPHITE,GRASIM,GESHIP,GREAVESCOT,GRINDWELL,GUJALKALI,GUJGASLTD,GMDCLTD,GNFC,GPPL,GSFC,GSPL,GULFOILLUB,HCLTECH,HDFCAMC,HDFCBANK,HDFCLIFE,HFCL,HLEGLAS,HAPPSTMNDS,HAVELLS,HEG,HEMIPROP,HEROMOTOCO,HINDALCO,HCOPPER,HINDPETRO,HINDUNILVR,HINDZINC,HONAUT,HUDCO,ICICIBANK,ICICIGI,ICICIPRULI,ISEC,IDBI,IDFCFIRSTB,IDFC,IIFL,IRB,IRCON,ITC,ITI,ITDCEM,INDIACEM,IBREALEST,INDIAMART,INDIANB,IEX,INDHOTEL,IOC,IRCTC,IRFC,INDIGOPNTS,IGL,INDUSINDBK,INDUSTOWER,INFIBEAM,INFY,INOXWIND,INTELLECT,INDIGO,IPCALAB,JBCHEPHARM,JKCEMENT,JKLACEMENT,JKPAPER,JMFINANCIL,JSWENERGY,JSWSTEEL,JSWINFRA,JAMNAAUTO,JSL,JINDALSTEL,JINDWORLD,JUBLFOOD,JUBLPHARMA,JUBLINGREA,JUSTDIAL,JYOTHYLAB,KALYANKJIL,KEI,KNRCON,KPITTECH,KRBL,KSB,KAJARIACER,KALPATPOWR,KANSNEROL,KARURVYSYA,KEC,KENNAMET,KIMS,KIRLOSENG,KIRLPNU,KOLTEPATIL,KOTAKBANK,L&TFH,LTTS,LICHSGFIN,LICI,LAURUSLABS,LXCHEM,LEMONTREE,LINDEINDIA,LUPIN,LUXIND,MASFIN,MRF,MTARTECH,MTNL,MGL,MAHSEAMLES,M&MFIN,M&M,MAHINDCIE,MANAPPURAM,MAPMYINDIA,MARICO,MARUTI,MASTEK,MEDPLUS,METROBRAND,METROPOLIS,MFSL,MINDACORP,MSUMI,MOTILALOFS,MPHASIS,MCX,MUTHOOTFIN,NHPC,NLCINDIA,NMDC,NOCIL,NTPC,NATIONALUM,NAVINFLUOR,NAZARA,NEOGEN,NESCO,NESTLEIND,NETWORK18,NIPPONLIIF,OBEROIRLTY,ONGC,OIL,OLECTRA,PAYTM,OFSS,ORIENTELEC,POLICYBZR,PCBL,PIIND,PNBHOUSING,PNCINFRA,PVRINOX,PAGEIND,PATANJALI,PEL,PFC,POWERGRID,PRESTIGE,PRINCEPIPE,PRSMJOHNSN,PRAJIND,PRINCEPIPE,PRIVISCL,PNB,QUESS,RBLBANK,RECLTD,RHIM,RITES,RADICO,RAIN,RAINBOW,RAJESHEXPO,RALLIS,RAMCOCEM,RATNAMANI,RAYMOND,REDINGTON,RELAXO,RELIANCE,RELIGARE,RVNL,SJVN,SKFINDIA,SRF,SANOFI,SAPPHIRE,SAREGAMA,SASTASUNDR,SBIETFSUM,SBICARD,SBILIFE,SCHAEFFLER,SHOPERSTOP,SHREECEM,SHRIRAMFIN,SIEMENS,SOBHA,SOLARINDS,SONACOMS,SONATSOFTW,STARHEALTH,SBI,SAIL,SUNPHARMA,SUNTV,SUNDARMFIN,SUNDRMFAST,SUNTECK,SUPRAJIT,SUPREMEIND,SUZLON,SWANENERGY,SYNGENE,TARC,TCIEXP,TTKPRESTIG,TV18BRDCST,TVSMOTOR,TVSSRICHAK,TARSONS,TATACONSUM,TATACOMM,TATAELXSI,TATAMOTORS,TATAPOWER,TATASTEEL,TATAINVEST,TATATECH,TECHM,TEJASNET,TIMKEN,TITAN,TORNTPHARM,TORNTPOWER,TREND,TRIDENT,TRIVENI,UCOBANK,UBL,UDEV,UNIONBANK,UPL,UTIAMC,VGUARD,VMART,VIPIND,VAIBHAVGBL,VAKRANGEE,VALIANTORG,VARROC,VBL,VEDL,VENKEYS,VIJAYA,VINATIORG,VOLTAS,WELCORP,WELSPUNLIV,WESTLIFE,WHIRLPOOL,WIPRO,YESBANK,ZFCVINDIA,ZEEL,ZENSARTECH,ZOMATO,ZYDUSLIFE"
-BSE_500_TICKERS = "RELIANCE,HDFCBANK,TCS,ICICIBANK,INFY,ITC,SBI,BHARTIARTL,HINDUNILVR,LTIM,LT,AXISBANK,KOTAKBANK,M&M,HCLTECH,BAJFINANCE,SUNPHARMA,MARUTI,TATAMOTORS,NTPC,ASIANPAINT,TITAN,ULTRACEMCO,POWERGRID,BAJAJFINSV,JSWSTEEL,TATASTEEL,TECHM,BAJAJ-AUTO,INDUSINDBK,NESTLEIND" # Truncated for token limit but expandable
+# 🟢 Hardcoded massive pool mapped exactly to your prompt input
+BSE_500_TICKERS = (
+    "GRSE,ETERNAL,RELIANCE,BANDHANBNK,VEDL,MAZDOCK,HDFCBANK,SUNPHARMA,COCHINSHIP,CEATLTD,"
+    "M&M,SBIN,ADANIPOWER,MARUTI,GROWW,COALINDIA,ICICIBANK,BSE,DATAPATTNS,EMMVEE,ONGC,"
+    "TENNIND,CHENNPETRO,BHARTIARTL,NETWEB,INFY,MCX,ITC,DIXON,SCI,ADANIENT,RECLTD,IDEA,"
+    "SUZLON,TATASTEEL,AXISBANK,RBLBANK,LT,GMDCLTD,JIOFIN,STARHEALTH,CROMPTON,DRREDDY,"
+    "INDIGO,OFSS,HCLTECH,TCS,WAAREEENER,SHRIRAMFIN,PFC,GODFRYPHLP,ATGL,BAJFINANCE,TMPV,"
+    "GESHIP,JPPOWER,VBL,COHANCE,ADANIGREEN,BPCL,SWIGGY,POWERINDIA,INDUSTOWER,ADANIPORTS,"
+    "ENRIN,HSCL,SWANCORP,EMCURE,TECHM,LODHA,NESTLEIND,SAIL,HINDZINC,FORCEMOT,BHEL,PERSISTENT,"
+    "NATIONALUM,SAMMAANCAP,KAYNES,BHARATFORG,ULTRACEMCO,INDUSINDBK,PIRAMALFIN,TATAPOWER,ADANIENSOL,"
+    "WELCORP,TVSMOTOR,EICHERMOT,HINDUNILVR,HINDALCO,NMDC,BAJAJ-AUTO,BEL,TATACHEM,PAYTM,JSWSTEEL,"
+    "CANBK,GVT&D,ASHOKLEY,NHPC,TRENT,OIL,HDFCLIFE,HAL,WIPRO,OLAELEC,UNIONBANK,BRITANNIA,MAHABANK,"
+    "TMCV,ABCAPITAL,NTPC,AWL,HAVELLS,POWERGRID,HINDCOPPER,HEROMOTOCO,YESBANK,SONACOMS,HFCL,"
+    "NAUKRI,ABB,CDSL,JAINREC,KOTAKBANK,IDFCFIRSTB,AUROPHARMA,POLYCAB,KEI,BDL,TITAN,FEDERALBNK,"
+    "RVNL,ATHERENERG,APOLLOHOSP,NAVINFLUOR,SAPPHIRE,INDIANB,JKTYRE,TARIL,MAXHEALTH,COFORGE,IGL,"
+    "EXIDEIND,JSWENERGY,PNB,GRASIM,MOTHERSON,FIVESTAR,RPOWER,HDFCAMC,POLICYBZR,IIFL,GLENMARK,"
+    "CONCORDBIO,CGPOWER,LAURUSLABS,MRF,TEJASNET,MRPL,BLUESTARCO,ASTRAL,HYUNDAI,GAIL,PPLPHARMA,"
+    "CUMMINSIND,APARINDS,IOC,GODREJPROP,MUTHOOTFIN,DLF,BANKBARODA,SBILIFE,HINDPETRO,SBICARD,"
+    "ONESOURCE,ASIANPAINT,MSUMI,TATAELXSI,KALYANKJIL,LLOYDSME,ANGELONE,SUPREMEIND,J&KBANK,NLCINDIA,"
+    "MOTILALOFS,CANHLIFE,LUPIN,M&MFIN,PNBHOUSING,JINDALSTEL,AMBER,TATACONSUM,SOLARINDS,LENSKART,"
+    "OLECTRA,BAJAJFINSV,NTPCGREEN,KPITTECH,INDHOTEL,BOSCHLTD,PETRONET,JUBLFOOD,RKFORGE,REDINGTON,"
+    "GMRAIRPORT,SRF,RRKABEL,AUBANK,ABSLAMC,DIVISLAB,UPL,UNOMINDA,NAM-INDIA,JINDALSAW,HBLENGINE,"
+    "CGCL,BANKINDIA,JYOTICNC,ZEEL,IRFC,VOLTAS,MPHASIS,DMART,ZENTEC,MANAPPURAM,PGEL,SHYAMMETL,"
+    "IREDA,LTM,CIPLA,CONCOR,SYRMA,DALBHARAT,LICHSGFIN,IEX,LTF,PIIND,PHOENIXLTD,HUDCO,HEG,CHOLAFIN,"
+    "GRAPHITE,DEVYANI,GPIL,INOXWIND,KIRLOSENG,AARTIIND,UNITDSPR,ENGINERSIN,LICI,PWL,NCC,APOLLOTYRE,"
+    "ACUTAAS,ANANDRATHI,KIMS,LGEINDIA,ITCHOTELS,SIEMENS,VMM,RADICO,ANANTRAJ,POONAWALLA,GRANULES,"
+    "TORNTPHARM,NBCC,INDIACEM,COLPAL,AMBUJACEM,PREMIERENE,IFCI,CUB,BALRAMCHIN,TORNTPOWER,ZYDUSLIFE,"
+    "TATACAP,360ONE,IDBI,BIOCON,IRCTC,ARE&M,MEESHO,BAJAJHFL,PCBL,CAMS,FORTIS,TRITURBINE,BEML,AFFLE,"
+    "PARADEEP,ICICIGI,DELHIVERY,MANKIND,INTELLECT,APLAPOLLO,CESC,ELGIEQUIP,IRCON,JWL,WOCKPHARMA,"
+    "SJVN,NATCOPHARM,JBMA,OBEROIRLTY,KEC,TITAGARH,NYKAA,DEEPAKFERT,KARURVYSYA,JBCHEPHARM,DEEPAKNTR,"
+    "MFSL,TIINDIA,ABFRL,ICICIAMC,CEMPRO,SAILIFE,KFINTECH,MARICO,PAGEIND,TATATECH,GILLETTE,ZENSARTECH,"
+    "JSWINFRA,LEMONTREE,BALKRISIND,CHOICEIN,CARTRADE,PRESTIGE,THELEELA,NSLNISP,RAILTEL,FACT,NEWGEN,"
+    "GLAXO,GODREJCP,LINDEINDIA,TATAINVEST,USHAMART,TATACOMM,IKS,CASTROLIND,GRAVITA,CYIENT,BELRISE,"
+    "COROMANDEL,ASTERDM,WHIRLPOOL,JSL,PIDILITIND,CLEAN,PATANJALI,LTFOODS,SARDAEN,ACMESOLAR,THERMAX,"
+    "DABUR,FINCABLES,NH,URBANCO,ABREL,GALLANTT,LALPATHLAB,FSL,SAGILITY,ICICIPRULI,HOMEFIRST,"
+    "SONATSOFTW,NEULANDLAB,TRIDENT,PVRINOX,SYNGENE,IOB,CPPLUS,SIGNATURE,ALKEM,CCL,ESCORTS,FLUOROCHEM,"
+    "ELECON,SCHAEFFLER,ATUL,GODREJIND,IRB,LTTS,FIRSTCRY,ECLERX,ENDURANCE,SUNTV,SOBHA,ABBOTINDIA,"
+    "APTUS,VTL,JMFINANCIL,SHREECEM,BSOFT,ITI,KAJARIACER,CRAFTSMAN,CREDITACC,CHAMBLFERT,TECHNOE,"
+    "CHOLAHLDNG,SUNDARMFIN,AFCONS,CARBORUNIV,BHARTIHEXA,ACC,ANTHEM,SCHNEIDER,BAJAJHLDNG,PINELABS,"
+    "AEGISLOG,MINDACORP,IPCALAB,CANFINHOME,CENTRALBK,NUVAMA,BLS,NIVABUPA,UCOBANK,NAVA,WELSPUNLIV,"
+    "AJANTPHARM,GICRE,MEDANTA,JUBLPHARMA,3MINDIA,LATENTVIEW,GABRIEL,TTML,GODIGIT,EMAMILTD,RAINBOW,"
+    "JKCEMENT,INDGN,ACE,HDBFS,INDIAMART,ABDL,BLUEJET,POLYMED,ZYDUSWELL,CRISIL,KPRMILL,AEGISVOPAK,"
+    "HEXT,GSPL,MMTC,MGL,AADHARHFC,UBL,ASAHIINDIA,BATAINDIA,EIDPARRY,NUVOCO,DOMS,UTIAMC,NIACL,"
+    "HONASA,BIKAJI,RAMCOCEM,ZFCVINDIA,ANURAS,AIIL,JSWCEMENT,IGIL,HONAUT,SBFC,RITES,CAPLIPOINT,"
+    "BRIGADE,SPLPETRO,ERIS,PTCIL,MAPMYINDIA,BAYERCROP,AAVAS,TEGA,SAREGAMA,TBOTEK,VIJAYA,DCMSHRIRAM,"
+    "AIAENG,GLAND,TIMKEN,JUBLINGREA,CHALET,BERGEPAINT,BBTC,EIHOTEL,KPIL,SUMICHEM,ABLBL,BLUEDART,"
+    "PFIZER,RHIM,JSWDULUX,TRAVELFOOD"
+)
 
-SECTOR_MAP = {
-    "HDFCBANK": "Financial Services", "ICICIBANK": "Financial Services", "SBIN": "Financial Services", 
-    "AXISBANK": "Financial Services", "KOTAKBANK": "Financial Services", "BAJFINANCE": "Financial Services",
-    "BAJAJFINSV": "Financial Services", "TCS": "IT", "INFY": "IT", "HCLTECH": "IT", "TECHM": "IT", "WIPRO": "IT", 
-    "RELIANCE": "Energy / Oil & Gas", "HINDUNILVR": "FMCG", "ITC": "FMCG", "TATAMOTORS": "Automobile", 
-    "M&M": "Automobile", "SUNPHARMA": "Pharma / Healthcare", "TITAN": "Consumer Durables"
-}
+# Baseline Nifty 50 pool
+NIFTY_50_TICKERS = (
+    "RELIANCE,TCS,HDFCBANK,ICICIBANK,INFY,BHARTIARTL,HINDUNILVR,ITC,SBIN,LTIM,ADANIENT,ADANIPORTS,"
+    "ASIANPAINT,AXISBANK,BAJAJ-AUTO,BAJFINANCE,BAJAJFINSV,BPCL,BRITANNIA,CIPLA,COALINDIA,DIVISLAB,"
+    "DRREDDY,EICHERMOT,GRASIM,HCLTECH,HEROMOTOCO,HINDALCO,INDUSINDBK,JSWSTEEL,KOTAKBANK,LT,M&M,"
+    "MARUTI,NESTLEIND,NTPC,ONGC,POWERGRID,SBILIFE,SUNPHARMA,TATACONSUM,TATAMOTORS,TATASTEEL,TECHM,"
+    "TITAN,ULTRACEMCO,UPL,WIPRO"
+)
 
 # ===========================================================================
 #  PAGE SETUP & CSS STYLING
 # ===========================================================================
-st.set_page_config(page_title="NSE+BSE Screener", page_icon="🚀", layout="wide", initial_sidebar_state="expanded")
-
 st.markdown("""
 <style>
 @import url('https://googleapis.com');
@@ -99,7 +141,11 @@ def check_upstox_token(token: str) -> bool:
     if not clean_token:
         return False
     url = f"{UPSTOX_BASE}/user/profile"
-    headers = {'Accept': 'application/json', 'Authorization': f'Bearer {clean_token}', 'Api-Version': '2.0'}
+    headers = {
+        'Accept': 'application/json', 
+        'Authorization': f'Bearer {clean_token}', 
+        'Api-Version': '2.0'
+    }
     try:
         response = requests.get(url, headers=headers, timeout=5)
         return response.status_code == 200
@@ -107,7 +153,7 @@ def check_upstox_token(token: str) -> bool:
         return False
 
 def pull_upstox_price(symbol: str, token: str, exchange: str) -> float:
-    """Safely retrieves price from Upstox Live Feed API."""
+    """Retrieves live last traded price from Upstox API."""
     inst_key = f"NSE_EQ|{symbol}" if exchange == "NSE" else f"BSE_EQ|{symbol}"
     url = f"{UPSTOX_BASE}/market-quote/quotes"
     headers = {'Accept': 'application/json', 'Authorization': f'Bearer {token}', 'Api-Version': '2.0'}
@@ -125,40 +171,42 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
     """Calculates momentum matrix dynamically via Yahoo or Upstox."""
     res = {
         "Symbol": symbol, "Live Price": 0.0, "EPS Accel": "No Data", 
-        "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", "Sector": SECTOR_MAP.get(symbol, "Other")
+        "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", "Sector": "Other"
     }
     
-    # 🟢 STEP 1: Gather Live Price based on Source
     close_px = 0.0
     yf_symbol = f"{symbol}.NS" if exchange == "NSE" else f"{symbol}.BO"
     
+    # Attempt to grab price from Upstox if requested
     if source == "Upstox" and token:
         close_px = pull_upstox_price(symbol, token, exchange)
         
-    # If Upstox failed or Yahoo was picked, fall back to Yahoo for price
-    if close_px == 0.0:
-        try:
-            stock = yf.Ticker(yf_symbol)
-            hist = stock.history(period="1y")
-            if hist.empty: return res
+    # If Yahoo picked or Upstox fails, rely directly on the yfinance engine
+    try:
+        stock = yf.Ticker(yf_symbol)
+        hist = stock.history(period="1y")
+        if hist.empty: return res
+        
+        if close_px == 0.0:
             close_px = hist['Close'].iloc[-1]
             
-            # Heavy lifting using Yahoo data
-            hist['21EMA'] = hist['Close'].ewm(span=21, adjust=False).mean()
-            ema_21 = hist['21EMA'].iloc[-1]
-            if close_px > ema_21 and close_px < (ema_21 * 1.025):
-                res["21MA Buy Zone"] = "🔥 HIT"
-                
-            wh_52 = hist['Close'].max()
-            if (close_px / wh_52) >= 0.85:
-                res["RS Resilient"] = "✅ YES"
-                
-            info = stock.info
-            if "forwardEps" in info and "trailingEps" in info:
-                if info["forwardEps"] is not None and info["trailingEps"] is not None:
-                    res["EPS Accel"] = "✅ Yes" if info["forwardEps"] > info["trailingEps"] else "❌ No"
-        except:
-            pass
+        hist['21EMA'] = hist['Close'].ewm(span=21, adjust=False).mean()
+        ema_21 = hist['21EMA'].iloc[-1]
+        if close_px > ema_21 and close_px < (ema_21 * 1.025):
+            res["21MA Buy Zone"] = "🔥 HIT"
+            
+        wh_52 = hist['Close'].max()
+        if (close_px / wh_52) >= 0.85:
+            res["RS Resilient"] = "✅ YES"
+            
+        info = stock.info
+        if "sector" in info:
+            res["Sector"] = info["sector"]
+        if "forwardEps" in info and "trailingEps" in info:
+            if info["forwardEps"] is not None and info["trailingEps"] is not None:
+                res["EPS Accel"] = "✅ Yes" if info["forwardEps"] > info["trailingEps"] else "❌ No"
+    except:
+        pass
             
     res["Live Price"] = round(close_px, 2)
     return res
@@ -174,7 +222,7 @@ def main():
     st.markdown("""
     <div class='hdr'>
         <h1>NSE + BSE Multibagger Screener</h1>
-        <div class='sub'>V6.0 • MULTI-SOURCE DYNAMIC ENGINE</div>
+        <div class='sub'>V6.0 • DYNAMIC MULTI-SOURCE EXECUTION</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -199,12 +247,11 @@ def main():
             
         st.markdown("<div class='slbl'>Heavy Cloud Scan Extractor</div>", unsafe_allow_html=True)
         
-        # 🟢 THE PUSH: Added source and mass index selections
         col_s1, col_s2 = st.columns(2)
         with col_s1:
             data_source = st.selectbox("Select Price/Data Source", ["Yahoo Finance", "Upstox"])
         with col_s2:
-            target_index = st.selectbox("Select Target Pool to Scan", ["Nifty 500", "BSE 500", "Custom List"])
+            target_index = st.selectbox("Select Target Pool to Scan", ["BSE 500 (Input Custom)", "Nifty 50", "Custom List"])
             
         custom_list = ""
         if target_index == "Custom List":
@@ -212,19 +259,19 @@ def main():
 
         if st.button("🛰️ Pull & Process Market Assets"):
             # Set target list based on dropdown
-            if target_index == "Nifty 500":
-                unique_assets = NIFTY_500_TICKERS.split(",")
-                exch = "NSE"
-            elif target_index == "BSE 500":
+            if target_index == "BSE 500 (Input Custom)":
                 unique_assets = BSE_500_TICKERS.split(",")
-                exch = "BSE"
+                exch = "NSE"  # Handled as default mapping on Yahoo .NS
+            elif target_index == "Nifty 50":
+                unique_assets = NIFTY_50_TICKERS.split(",")
+                exch = "NSE"
             else:
                 unique_assets = [x.strip().upper() for x in custom_list.split(",") if x.strip()]
                 exch = "NSE"
                 
-            # Capped limit to prevent massive execution times
-            cap_limit = 50 # Increase to process more
-            st.info(f"Loaded {len(unique_assets)} targets. Processing top {cap_limit} to prevent freezes...")
+            # Limit pool loop manually to prevent server memory lockup
+            cap_limit = 50 
+            st.info(f"Loaded {len(unique_assets)} targets. Processing first {cap_limit} (adjust code limit to run all)...")
             
             prog_bar = st.progress(0.0)
             status_box = st.empty()
