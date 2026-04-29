@@ -146,23 +146,25 @@ def main():
         selected_batch_idx_raw = st.selectbox("Select Asset Cluster to Process",range(num_batches),index=st.session_state['active_batch_idx'], 
         format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}")
         
-    # 🟢 THE CRITICAL FIX: Forces fallback to 0 if Streamlit returns None [1]
+           batch_size = 50
+        total_assets = len(unique_assets)
+        num_batches = math.ceil(total_assets / batch_size)
+        
+        # 🟢 THE CRITICAL FIX: Prevent memory leakage out of array boundaries
+        if st.session_state['active_batch_idx'] >= num_batches:
+            st.session_state['active_batch_idx'] = 0
+            
+        selected_batch_idx_raw = st.selectbox(
+            "Select Asset Cluster to Process", 
+            range(num_batches), 
+            index=st.session_state['active_batch_idx'], 
+            format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}"
+        )
+        
+        # Fallback if Streamlit returns None on quick load frames
         selected_batch_idx = selected_batch_idx_raw if selected_batch_idx_raw is not None else 0
         st.session_state['active_batch_idx'] = selected_batch_idx
-        
-        # Execution pointers
-        loop_start = selected_batch_idx * batch_size
-        loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
-        execution_pool = unique_assets[loop_start:loop_end]
 
-        st.session_state['auto_run'] = st.checkbox("Enable Automated Loop", value=st.session_state['auto_run'])
-        manual_run = st.button("🛰️ Pull & Process Selected Batch")
-
-        if manual_run or st.session_state['auto_run']:
-            # This line will now execute perfectly without the error!
-            st.info(f"Processing Batch {selected_batch_idx+1}...")
-            prog_bar = st.progress(0.0)
-            processed_results = []
 
     with tab_db:
         if st.button("🗑️ Clear Database"):
