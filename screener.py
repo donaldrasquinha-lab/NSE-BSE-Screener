@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Cloud Sync supporting Yahoo Finance & Upstox v2.0
-Tab 2: Master Ledger Grid for Hardcoded 500 Target Portfolios
-Tab 3: Clustered Momentum Picks & Asset Pools
+Tab 1: Cloud Sync supporting Yahoo Finance & Upstox v2.0 in Batches of 100
+Tab 2: Master Ledger Database for hardcoded Nifty 50 & Custom 500
+Tab 3: Clustered Momentum Results Grid
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
@@ -20,9 +20,9 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
-UPSTOX_BASE = "https://api.upstox.com/v2"
+UPSTOX_BASE = "https://upstox.com"
 
-# 🟢 Hardcoded massive pool mapped exactly to your prompt input
+# Hardcoded massive pool mapped exactly to your prompt input (approx 500+ assets)
 BSE_500_TICKERS = (
     "GRSE,ETERNAL,RELIANCE,BANDHANBNK,VEDL,MAZDOCK,HDFCBANK,SUNPHARMA,COCHINSHIP,CEATLTD,"
     "M&M,SBIN,ADANIPOWER,MARUTI,GROWW,COALINDIA,ICICIBANK,BSE,DATAPATTNS,EMMVEE,ONGC,"
@@ -83,6 +83,8 @@ NIFTY_50_TICKERS = (
 # ===========================================================================
 #  PAGE SETUP & CSS STYLING
 # ===========================================================================
+st.set_page_config(page_title="NSE+BSE Screener", page_icon="🚀", layout="wide", initial_sidebar_state="expanded")
+
 st.markdown("""
 <style>
 @import url('https://googleapis.com');
@@ -141,11 +143,7 @@ def check_upstox_token(token: str) -> bool:
     if not clean_token:
         return False
     url = f"{UPSTOX_BASE}/user/profile"
-    headers = {
-        'Accept': 'application/json', 
-        'Authorization': f'Bearer {clean_token}', 
-        'Api-Version': '2.0'
-    }
+    headers = {'Accept': 'application/json', 'Authorization': f'Bearer {clean_token}', 'Api-Version': '2.0'}
     try:
         response = requests.get(url, headers=headers, timeout=5)
         return response.status_code == 200
@@ -181,7 +179,7 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
     if source == "Upstox" and token:
         close_px = pull_upstox_price(symbol, token, exchange)
         
-    # If Yahoo picked or Upstox fails, rely directly on the yfinance engine
+    # Standard Yahoo flow for metrics and fallback price
     try:
         stock = yf.Ticker(yf_symbol)
         hist = stock.history(period="1y")
@@ -222,7 +220,7 @@ def main():
     st.markdown("""
     <div class='hdr'>
         <h1>NSE + BSE Multibagger Screener</h1>
-        <div class='sub'>V6.0 • DYNAMIC MULTI-SOURCE EXECUTION</div>
+        <div class='sub'>V6.0 • DYNAMIC BATCH EXECUTION</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -251,51 +249,74 @@ def main():
         with col_s1:
             data_source = st.selectbox("Select Price/Data Source", ["Yahoo Finance", "Upstox"])
         with col_s2:
-            target_index = st.selectbox("Select Target Pool to Scan", ["BSE 500 (Input Custom)", "Nifty 50", "Custom List"])
+            target_index = st.selectbox("Select Target Pool to Scan", ["BSE 500 (Custom Input)", "Nifty 50", "Custom List"])
             
         custom_list = ""
         if target_index == "Custom List":
             custom_list = st.text_area("Enter Custom Tickers (Comma Separated):", "RELIANCE,TCS,INFY")
 
-        if st.button("🛰️ Pull & Process Market Assets"):
-            # Set target list based on dropdown
-            if target_index == "BSE 500 (Input Custom)":
-                unique_assets = BSE_500_TICKERS.split(",")
-                exch = "NSE"  # Handled as default mapping on Yahoo .NS
-            elif target_index == "Nifty 50":
-                unique_assets = NIFTY_50_TICKERS.split(",")
-                exch = "NSE"
-            else:
-                unique_assets = [x.strip().upper() for x in custom_list.split(",") if x.strip()]
-                exch = "NSE"
-                
-            # Limit pool loop manually to prevent server memory lockup
-            cap_limit = 50 
-            st.info(f"Loaded {len(unique_assets)} targets. Processing first {cap_limit} (adjust code limit to run all)...")
+        # Set up assets list
+        if target_index == "BSE 500 (Custom Input)":
+            unique_assets = BSE_500_TICKERS.split(",")
+            exch = "NSE"
+        elif target_index == "Nifty 50":
+            unique_assets = NIFTY_50_TICKERS.split(",")
+            exch = "NSE"
+        else:
+            unique_assets = [x.strip().upper() for x in custom_list.split(",") if x.strip()]
+            exch = "NSE"
+
+        # 🟢 BATCH SELECTION LOGIC
+        # Cap set to 100 for batches as requested.
+        batch_size = 100
+        total_assets = len(unique_assets)
+        
+        # Calculate number of required batches
+        num_batches = math.ceil(total_assets / batch_size)
+        
+        # Generate dropdown labels for the batches
+        batch_labels = []
+        for i in range(num_batches):
+            start = i * batch_size
+            end = min((i + 1) * batch_size, total_assets)
+            batch_labels.append(f"Batch {i+1}: Stocks {start+1} to {end}")
+            
+        # Display the dropdown
+        selected_batch_idx = st.selectbox("Select Asset Cluster to Process", range(num_batches), format_func=lambda x: batch_labels[x])
+        
+        # Sift actual items for loop
+        loop_start = selected_batch_idx * batch_size
+        loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
+        execution_pool = unique_assets[loop_start:loop_end]
+
+        if st.button("🛰️ Pull & Process Selected Batch"):
+            st.info(f"Targeting {len(execution_pool)} items in {batch_labels[selected_batch_idx]}. Executing thread...")
             
             prog_bar = st.progress(0.0)
             status_box = st.empty()
             processed_results = []
             
-            for idx, symbol in enumerate(unique_assets[:cap_limit]):
+            for idx, symbol in enumerate(execution_pool):
                 status_box.text(f"Extracting [{data_source}]: {symbol}")
                 
                 # Fetch node
                 data_node = calculate_momentum_node(symbol, data_source, st.session_state['upstox_token'], exch)
                 processed_results.append(data_node)
-                prog_bar.progress((idx + 1) / cap_limit)
+                prog_bar.progress((idx + 1) / len(execution_pool))
                 
-            status_box.success("Scan boundary finished!")
+            status_box.success("Scan cluster limits hit successfully!")
+            
+            # Save strictly the latest batch to memory
             st.session_state['scanned_df'] = pd.DataFrame(processed_results)
 
     # --- TAB 2: DATABASE ---
     with tab_db:
         st.markdown("<div class='slbl'>Database Grid</div>", unsafe_allow_html=True)
         if st.session_state['scanned_df'].empty:
-            st.info("No scanned assets in registry. Go to Tab 1 and click the 'Pull & Process' button.")
+            st.info("No scanned assets in registry. Go to Tab 1 and click the 'Process' button.")
         else:
             df_full = st.session_state['scanned_df']
-            st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
+            st.dataframe(df_full.sort_values(by='Symbol').reset_index(drop=True), use_container_width=True)
 
     # --- TAB 3: MOMENTUM STRATEGY HUB ---
     with tab_momentum:
@@ -322,7 +343,7 @@ def main():
                     </div>
                     """, unsafe_allow_html=True)
             else:
-                st.info("No assets met all calculated parameters.")
+                st.info("No assets met all calculated parameters in this cluster.")
             
             st.markdown("<div class='group-header'>📊 Group 2: Other Scanned Assets</div>", unsafe_allow_html=True)
             for r in other_results:
