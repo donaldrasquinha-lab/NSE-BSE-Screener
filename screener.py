@@ -241,7 +241,7 @@ def main():
 tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"])
 
 # --- TAB 1: SCREENER ---
-with tab_screener:
+    with tab_screener:
         st.markdown("<div class='slbl'>Upstox API Authentication (v2)</div>", unsafe_allow_html=True)
         if 'upstox_token' not in st.session_state:
             st.session_state['upstox_token'] = ""
@@ -323,8 +323,8 @@ with tab_screener:
             # Save the extended list back to session state
             st.session_state['scanned_df'] = combined_df
 
-    # --- TAB 2: DATABASE ---
-    with tab_db:
+# --- TAB 2: DATABASE ---
+   with tab_db:
         st.markdown("<div class='slbl'>Database Grid</div>", unsafe_allow_html=True)
         
         if st.session_state['scanned_df'].empty:
@@ -383,7 +383,7 @@ with tab_screener:
                 """, unsafe_allow_html=True)
 
 # --- 🟢 TAB 4: MOMENTUM HUB WITH CHARTS ---
-    with tab_charts:
+   with tab_charts:
         st.markdown("<div class='slbl'>🎯 Active Momentum Executions</div>", unsafe_allow_html=True)
         if st.session_state['scanned_df'].empty:
             st.info("Database empty. You must process stocks on Tab 1 first.")
@@ -455,7 +455,7 @@ with tab_screener:
                         st.warning(f"Unable to load chart for {symbol}. Moving to next.")
 
 # --- 🟢 TAB 5: SECTOR HEATMAP ---
-    with tab_heatmap:
+   with tab_heatmap:
         st.markdown("<div class='slbl'>🗺️ Sector Heatmap Distribution</div>", unsafe_allow_html=True)
         if st.session_state['scanned_df'].empty:
             st.info("Database empty. You must process stocks on Tab 1 first.")
