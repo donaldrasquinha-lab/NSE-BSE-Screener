@@ -10,6 +10,7 @@ RUN:      streamlit run screener_st.py
 """
 
 import io
+import gzip
 import requests
 import numpy  as np
 import pandas as pd
@@ -20,10 +21,10 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & CONSTANTS
 # ===========================================================================
-UPSTOX_BASE  = "https://api.upstox.com/v2"
+UPSTOX_BASE  = "https://upstox.com"
 
-# Direct URL to parse equities safely without CDN gzip restrictions
-UPSTOX_DIRECT_URL = "https://api.upstox.com/v2"
+# 🟢 Official Upstox compressed Master Instrument URL
+UPSTOX_GZ_URL = "https://upstox.com"
 
 # Fallback mapping to populate clean sectors for known top assets
 SECTOR_MAP = {
@@ -197,27 +198,28 @@ def main():
         
         if st.button("🛰️ Pull & Process All Equities from Upstox"):
             try:
-                with st.spinner("Downloading live symbol tapes from Upstox..."):
-                    # Uses explicit User-Agent to stop Upstox CDN from returning JSON errors
+                with st.spinner("Downloading and decompressing live symbol tapes from Upstox CDN..."):
+                    # 🟢 FORCING DESKTOP USER AGENT TO PREVENT 403/JSON BLOCKS
                     headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                     }
-                    response = requests.get(UPSTOX_DIRECT_URL, headers=headers, timeout=15)
+                    response = requests.get(UPSTOX_GZ_URL, headers=headers, timeout=20)
                     
                     if response.status_code != 200:
                         st.error(f"Failed to fetch data. Upstox server returned status {response.status_code}.")
                         return
                     
-                    # Decodes direct CSV payload
-                    df = pd.read_csv(io.StringIO(response.text))
+                    # 🟢 Safe extraction of compressed body
+                    with gzip.open(io.BytesIO(response.content), 'rt') as f:
+                        df = pd.read_csv(f)
                 
-                # Filter solely for cash shares
+                # Filter solely for cash equity shares
                 df_filtered = df[(df['instrument_type'] == 'EQUITY')]
                 unique_assets = df_filtered['tradingsymbol'].unique()
                 
-                # Capped limit to prevent execution timeouts
+                # Capped limit to prevent long execution timeouts (Change to calculate more)
                 cap_limit = 100
-                st.info(f"Retrieved {len(unique_assets)} targets. Processing top {cap_limit} to prevent server freeze...")
+                st.info(f"Retrieved {len(unique_assets)} total equity targets. Processing top {cap_limit} assets...")
                 
                 prog_bar = st.progress(0.0)
                 status_box = st.empty()
