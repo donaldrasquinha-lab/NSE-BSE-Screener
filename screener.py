@@ -94,7 +94,7 @@ def pull_upstox_price(symbol: str, token: str, exchange: str) -> float:
 def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange: str = "NSE") -> dict:
     """Calculates momentum matrix dynamically via Yahoo or Upstox."""
     res = {"Symbol": symbol, "Live Price": 0.0, "EPS Accel": "No Data", "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", "Sector": SECTOR_MAP.get(symbol, "Other / Diversified")}
-     close_px = 0.0
+    close_px = 0.0
     # 🟢 Removes random $ or spaces sometimes carried in bulk strings
     clean_symbol = symbol.replace('$', '').strip()
     yf_symbol = f"{clean_symbol}.NS" if exchange == "NSE" else f"{clean_symbol}.BO"
