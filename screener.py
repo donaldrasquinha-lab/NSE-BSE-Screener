@@ -6,9 +6,6 @@ Tab 2: Master Ledger Database that continuously appends results
 Tab 3: Clustered Momentum Results Grid
 Tab 4: Momentum Picks with Interactive Candlestick Charts
 Tab 5: Bulletproof Sector Heatmap Grid
-
-INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
-RUN:      streamlit run screener.py
 """
 
 import io
@@ -246,6 +243,7 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
         info = stock.info
         if "sector" in info and info["sector"]:
             res["Sector"] = info["sector"]
+            
         if "forwardEps" in info and "trailingEps" in info:
             if info["forwardEps"] is not None and info["trailingEps"] is not None:
                 res["EPS Accel"] = "✅ Yes" if info["forwardEps"] > info["trailingEps"] else "❌ No"
@@ -263,11 +261,9 @@ def main():
     if 'scanned_df' not in st.session_state:
         st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
     
+    # Track the active batch across refreshes
     if 'active_batch_idx' not in st.session_state:
         st.session_state['active_batch_idx'] = 0
-        
-    if 'auto_run' not in st.session_state:
-        st.session_state['auto_run'] = False
 
     st.markdown("""
     <div class='hdr'>
@@ -332,13 +328,250 @@ def main():
             end = min((i + 1) * batch_size, total_assets)
             batch_labels.append(f"Batch {i+1}: Stocks {start+1} to {end}")
             
+        # 🟢 STEP 1: Link dropdown directly to session state
         selected_batch_idx = st.selectbox(
             "Select Asset Cluster to Process", 
             range(num_batches), 
             index=st.session_state['active_batch_idx'],
             format_func=lambda x: batch_labels[x]
         )
+        # Update state if user overrides manually
         st.session_state['active_batch_idx'] = selected_batch_idx
         
         loop_start = selected_batch_idx * batch_size
-        loop_end = min((selected_batch_
+        loop_end
+        loop_start = selected_batch_idx * batch_size
+        loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
+        execution_pool = unique_assets[loop_start:loop_end]
+
+        # 🟢 AUTOMATED LOOP UI
+        st.session_state['auto_run'] = st.checkbox("Enable Automated Loop (Saves & advances automatically)", value=st.session_state['auto_run'])
+
+        # Create execution trigger
+        manual_run = st.button("🛰️ Pull & Process Selected Batch")
+
+        # Execute if clicked manually OR if auto-run is enabled
+        if manual_run or st.session_state['auto_run']:
+            st.info(f"Targeting {len(execution_pool)} items in {batch_labels[selected_batch_idx]}. Executing thread...")
+            
+            prog_bar = st.progress(0.0)
+            status_box = st.empty()
+            processed_results = []
+            
+            for idx, symbol in enumerate(execution_pool):
+                status_box.text(f"Extracting [{data_source}]: {symbol}")
+                data_node = calculate_momentum_node(symbol, data_source, st.session_state['upstox_token'], exch)
+                processed_results.append(data_node)
+                prog_bar.progress((idx + 1) / len(execution_pool))
+                
+            status_box.success("Scan cluster limits hit successfully!")
+            
+            # Save data to state
+            new_df = pd.DataFrame(processed_results)
+            combined_df = pd.concat([st.session_state['scanned_df'], new_df])
+            combined_df.drop_duplicates(subset=["Symbol"], keep='last', inplace=True)
+            st.session_state['scanned_df'] = combined_df
+
+            # Advance automated loop if checked
+            if st.session_state['auto_run']:
+                if st.session_state['active_batch_idx'] < num_batches - 1:
+                    st.session_state['active_batch_idx'] += 1
+                    # Slight delay to allow Streamlit network buffering
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.session_state['auto_run'] = False
+                    st.success("🎉 All batches automated successfully! Master database is ready.")
+
+    # --- TAB 2: DATABASE ---
+    with tab_db:
+        st.markdown("<div class='slbl'>Database Grid</div>", unsafe_allow_html=True)
+        if st.session_state['scanned_df'].empty:
+            st.info("No scanned assets in registry. Go to Tab 1 and click the 'Process' button.")
+        else:
+            col_db1, col_db2 = st.columns(2)
+            with col_db1:
+                st.write(f"📊 Currently holding **{len(st.session_state['scanned_df'])}** unique processed assets.")
+            with col_db2:
+                if st.button("🗑️ Clear Database"):
+                    st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
+                    st.session_state['active_batch_idx'] = 0
+                    st.session_state['auto_run'] = False
+                    st.rerun()
+
+            df_full = st.session_state['scanned_df']
+            st.dataframe(df_full.sort_values(by='Symbol').reset_index(drop=True), use_container_width=True)
+
+    # --- TAB 3: MOMENTUM STRATEGY HUB ---
+    with tab_momentum:
+        st.markdown("<div class='slbl'>Momentum Strategy Hub</div>", unsafe_allow_html=True)
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df']
+            perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')].to_dict('records')
+            other_results = df_full[~((df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT'))].to_dict('records')
+            
+            st.markdown("<div class='group-header'>🔥 Group 1: Perfect Momentum Picks</div>", unsafe_allow_html=True)
+            if perfect_hits:
+                for r in perfect_hits:
+                    st.markdown(f"""
+                    <div class="scard hit">
+                        <div class="ribbon">🔥 MOMENTUM PICK</div>
+                        <div class="ch"><div class="sym">{r['Symbol']}</div><div class="live-px">₹{r['Live Price']}</div></div>
+                        <div class="mgrid">
+                            <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['EPS Accel']}</div></div>
+                            <div class="met"><div class="ml">RS RESILIENT</div><div class="mv">✅ YES</div></div>
+                            <div class="met"><div class="ml">21MA BUY ZONE</div><div class="mv">🔥 HIT</div></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No assets met all calculated parameters in this cluster.")
+            
+            st.markdown("<div class='group-header'>📊 Group 2: Other Scanned Assets</div>", unsafe_allow_html=True)
+            for r in other_results:
+                st.markdown(f"""
+                <div class="scard">
+                    <div class="ch"><div class="sym">{r['Symbol']}</div><div class="live-px">₹{r['Live Price']}</div></div>
+                    <div class="mgrid">
+                        <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['EPS Accel']}</div></div>
+                        <div class="met"><div class="ml">RS RESILIENT</div><div class="mv">{r['RS Resilient']}</div></div>
+                        <div class="met"><div class="ml">21MA Buy Zone</div><div class="mv">{r['21MA Buy Zone']}</div></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # --- TAB 4: MOMENTUM HUB WITH CHARTS ---
+    with tab_charts:
+        st.markdown("<div class='slbl'>🎯 Active Momentum Executions</div>", unsafe_allow_html=True)
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df']
+            perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')]
+            
+            if perfect_hits.empty:
+                st.info("No perfect momentum fits detected in the current scanned array.")
+            else:
+                st.write(f"Found **{len(perfect_hits)}** highly optimized momentum setups:")
+                
+                for idx, row in perfect_hits.iterrows():
+                    symbol = row['Symbol']
+                    live_px = row['Live Price']
+                    
+                    st.markdown(f"""
+                    <div class="scard hit">
+                        <div class="ribbon">🔥 MOMENTUM PICK</div>
+                        <div class="ch">
+                            <div class="sym">{symbol}</div>
+                            <div class="live-px">₹{live_px}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    try:
+                        ticker_data = yf.Ticker(f"{symbol}.NS")
+                        hist_6m = ticker_data.history(period="6m")
+                        
+                        if not hist_6m.empty:
+                            hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()
+                            
+                            fig = go.Figure(data=[
+                                go.Candlestick(
+                                    x=hist_6m.index,
+                                    open=hist_6m['Open'],
+                                    high=hist_6m['High'],
+                                    low=hist_6m['Low'],
+                                    close=hist_6m['Close'],
+                                    name="Candles"
+                                ),
+                                go.Scatter(
+                                    x=hist_6m.index, 
+                                    y=hist_6m['21EMA'], 
+                                    mode='lines', 
+                                    line=dict(color='#fb923c', width=1.5), 
+                                    name="21 EMA"
+                                )
+                            ])
+                            
+                            fig.update_layout(
+                                xaxis_rangeslider_visible=False,
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                font=dict(color='#a8b4cc'),
+                                xaxis=dict(gridcolor='#1e2740'),
+                                yaxis=dict(gridcolor='#1e2740'),
+                                height=400,
+                                margin=dict(l=10, r=10, t=20, b=20)
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                    except Exception:
+                        pass
+
+    # --- TAB 5: SECTOR HEATMAP ---
+    with tab_heatmap:
+        st.markdown("<div class='slbl'>🗺️ Sector Heatmap Distribution</div>", unsafe_allow_html=True)
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df'].copy()
+            
+            # Clean prices for heatmap sizing safely
+            if 'Live Price' in df_full.columns:
+                df_full['Clean_Price'] = pd.to_numeric(
+                    df_full['Live Price'].astype(str).str.replace('₹', '').str.replace(',', ''), 
+                    errors='coerce'
+                ).fillna(1.0)
+            else:
+                df_full['Clean_Price'] = 1.0
+            
+            df_full['Clean_Price'] = df_full['Clean_Price'].apply(lambda x: x if x > 0 else 1.0)
+            
+            # Fill missing or blank sectors to prevent Plotly parent errors
+            if 'Sector' in df_full.columns:
+                df_full['Sector'] = df_full['Sector'].fillna("Other / Diversified").replace("", "Other / Diversified")
+            else:
+                df_full['Sector'] = "Other / Diversified"
+
+            # Build the hierarchical arrays required by Plotly Treemap
+            sectors = df_full['Sector'].unique().tolist()
+            symbols = df_full['Symbol'].tolist()
+            
+            labels = sectors + symbols
+            parents = ["" for _ in sectors] + df_full['Sector'].tolist()
+            
+            sector_sums = df_full.groupby('Sector')['Clean_Price'].sum().to_dict()
+            values = [sector_sums[sec] for sec in sectors] + df_full['Clean_Price'].tolist()
+            
+            try:
+                fig_hm = go.Figure(go.Treemap(
+                    labels=labels,
+                    parents=parents,
+                    values=values,
+                    textinfo="label+value",
+                    marker=dict(
+                        colorscale='Blues',
+                        showscale=True
+                    )
+                ))
+                
+                fig_hm.update_layout(
+                    title="<b>Scanned Portfolio Mapped by Sector (Box size = Price)</b>",
+                    title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
+                    height=600,
+                    margin=dict(l=10, r=10, t=50, b=10)
+                )
+                st.plotly_chart(fig_hm, use_container_width=True)
+                
+            except Exception as e:
+                st.error(f"Plotly could not build the tree. Error: {e}")
+            
+            st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
+            st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
+
+if __name__ == "__main__":
+    main()
