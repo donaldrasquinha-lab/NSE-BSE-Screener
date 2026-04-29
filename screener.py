@@ -20,7 +20,7 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
-UPSTOX_BASE = "https://upstox.com"
+UPSTOX_BASE = "https://api.upstox.com/v2"
 
 # Hardcoded massive pool mapped exactly to your prompt input (approx 500+ assets)
 BSE_500_TICKERS = (
