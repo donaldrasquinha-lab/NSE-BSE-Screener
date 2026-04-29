@@ -238,7 +238,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
+tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"])
 
     # --- TAB 1: SCREENER ---
     with tab_screener:
@@ -381,6 +381,115 @@ def main():
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+    # --- 🟢 TAB 4: MOMENTUM HUB WITH CHARTS ---
+    with tab_charts:
+        st.markdown("<div class='slbl'>🎯 Active Momentum Executions</div>", unsafe_allow_html=True)
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df']
+            
+            # Extract perfect hits matching both criteria
+            perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')]
+            
+            if perfect_hits.empty:
+                st.info("No perfect momentum fits detected in the current scanned array.")
+            else:
+                st.write(f"Found **{len(perfect_hits)}** highly optimized momentum setups:")
+                
+                for idx, row in perfect_hits.iterrows():
+                    symbol = row['Symbol']
+                    live_px = row['Live Price']
+                    
+                    # Display standalone card
+                    st.markdown(f"""
+                    <div class="scard hit">
+                        <div class="ribbon">🔥 MOMENTUM PICK</div>
+                        <div class="ch">
+                            <div class="sym">{symbol}</div>
+                            <div class="live-px">₹{live_px}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Render live candlestick chart
+                    try:
+                        ticker_data = yf.Ticker(f"{symbol}.NS")
+                        hist_6m = ticker_data.history(period="6m")
+                        
+                        if not hist_6m.empty:
+                            # Map 21 EMA for chart visual
+                            hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()
+                            
+                            fig = go.Figure(data=[
+                                go.Candlestick(
+                                    x=hist_6m.index,
+                                    open=hist_6m['Open'],
+                                    high=hist_6m['High'],
+                                    low=hist_6m['Low'],
+                                    close=hist_6m['Close'],
+                                    name="Candles"
+                                ),
+                                go.Scatter(
+                                    x=hist_6m.index, 
+                                    y=hist_6m['21EMA'], 
+                                    mode='lines', 
+                                    line=dict(color='#fb923c', width=1.5), 
+                                    name="21 EMA"
+                                )
+                            ])
+                            
+                            fig.update_layout(
+                                xaxis_rangeslider_visible=False,
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                font=dict(color='#a8b4cc'),
+                                xaxis=dict(gridcolor='#1e2740'),
+                                yaxis=dict(gridcolor='#1e2740'),
+                                height=400,
+                                margin=dict(l=10, r=10, t=20, b=20)
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"Unable to load chart for {symbol}. Moving to next.")
+    # --- 🟢 TAB 5: SECTOR HEATMAP ---
+    with tab_heatmap:
+        st.markdown("<div class='slbl'>🗺️ Sector Heatmap Distribution</div>", unsafe_allow_html=True)
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df']
+            
+            # Clean and clean prices for heatmap sizing
+            df_full['Clean_Price'] = pd.to_numeric(df_full['Live Price'].astype(str).str.replace('₹', '').str.replace(',', ''), errors='coerce').fillna(1.0)
+            
+            # Create interactive treemap heatmap
+            fig_hm = go.Figure(go.Treemap(
+                labels=df_full['Symbol'],
+                parents=df_full['Sector'],
+                values=df_full['Clean_Price'],
+                textinfo="label+value",
+                marker=dict(
+                    colorscale='Electric',
+                    showscale=True
+                )
+            ))
+            
+            fig_hm.update_layout(
+                title="<b>Scanned Portfolio Mapped by Sector (Box size = Stock Price)</b>",
+                title_font=dict(color="#f0f4ff"),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#a8b4cc'),
+                height=600,
+                margin=dict(l=10, r=10, t=50, b=10)
+            )
+            
+            st.plotly_chart(fig_hm, use_container_width=True)
+            
+            # Secondary sorted grid visual
+            st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
+            st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
 if __name__ == "__main__":
     main()
