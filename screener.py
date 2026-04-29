@@ -140,7 +140,7 @@ def main():
 
         unique_assets = BSE_500_TICKERS.split(",") if "BSE" in target_index else (NIFTY_500_TICKERS.split(",") if "500" in target_index else NIFTY_50_TICKERS.split(","))
         
-           batch_size = 50
+        batch_size = 50
         total_assets = len(unique_assets)
         num_batches = math.ceil(total_assets / batch_size)
         
