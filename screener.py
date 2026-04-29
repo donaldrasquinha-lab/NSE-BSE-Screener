@@ -143,44 +143,30 @@ def main():
 
         unique_assets = BSE_500_TICKERS.split(",") if "BSE" in target_index else (NIFTY_500_TICKERS.split(",") if "500" in target_index else NIFTY_50_TICKERS.split(","))
         
-        batch_size = 50
-        total_assets = len(unique_assets)
-        num_batches = math.ceil(total_assets / batch_size)
+                selected_batch_idx_raw = st.selectbox(
+            "Select Asset Cluster to Process", 
+            range(num_batches), 
+            index=st.session_state['active_batch_idx'], 
+            format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}"
+        )
         
+        # 🟢 THE CRITICAL FIX: Forces fallback to 0 if Streamlit returns None [1]
+        selected_batch_idx = selected_batch_idx_raw if selected_batch_idx_raw is not None else 0
+        st.session_state['active_batch_idx'] = selected_batch_idx
+        
+        # Execution pointers
+        loop_start = selected_batch_idx * batch_size
+        loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
+        execution_pool = unique_assets[loop_start:loop_end]
+
         st.session_state['auto_run'] = st.checkbox("Enable Automated Loop", value=st.session_state['auto_run'])
         manual_run = st.button("🛰️ Pull & Process Selected Batch")
 
-        # 🟢 CRITICAL FIX: Bypass the button state loss during st.rerun()
         if manual_run or st.session_state['auto_run']:
+            # This line will now execute perfectly without the error!
             st.info(f"Processing Batch {selected_batch_idx+1}...")
             prog_bar = st.progress(0.0)
             processed_results = []
-            
-            for idx, symbol in enumerate(execution_pool):
-                # Apply the symbol cleanup fix we established earlier
-                clean_sym = symbol.replace('$', '').strip()
-                processed_results.append(calculate_momentum_node(clean_sym, data_source, token_input))
-                prog_bar.progress((idx + 1) / len(execution_pool))
-                
-            new_df = pd.DataFrame(processed_results)
-            
-            # 🟢 HARDENED SAVE: Force append and deduplicate to stack the lists
-            if not new_df.empty:
-                combined_df = pd.concat([st.session_state['scanned_df'], new_df])
-                combined_df.drop_duplicates(subset=["Symbol"], keep='last', inplace=True)
-                st.session_state['scanned_df'] = combined_df
-                
-            status_box = st.success(f"Batch {selected_batch_idx+1} successfully committed to database!")
-
-            # 🟢 LOOP CONTROL: Safely advance and force persistent reload
-            if st.session_state['auto_run']:
-                if st.session_state['active_batch_idx'] < num_batches - 1:
-                    st.session_state['active_batch_idx'] += 1
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.session_state['auto_run'] = False
-                    st.success("🎉 All batches automated successfully!")
 
     with tab_db:
         if st.button("🗑️ Clear Database"):
