@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Downloads the massive live complete.csv.gz from Upstox CDN
-Tab 2: Manual upload point to load catalog into memory
-Tab 3: Momentum Strategy Hub with grouped results
+Tab 1: Upstox API v2 Auth + Manual File Downloader
+Tab 2: Manual Upload Point to Load Catalog into Memory
+Tab 3: Momentum Strategy Hub with Grouped Layouts
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
@@ -115,6 +115,22 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 #  LOGIC HANDLERS
 # ===========================================================================
 
+def check_upstox_token(token: str) -> bool:
+    """Verifies Upstox Token validity using the official API v2 profile endpoint."""
+    clean_token = token.strip() if token else ""
+    if not clean_token:
+        return False
+    url = f"{UPSTOX_BASE}/user/profile"
+    headers = {
+        'Accept': 'application/json', 
+        'Authorization': f'Bearer {clean_token}'
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        return response.status_code == 200
+    except Exception:
+        return False
+
 def fetch_and_prepare_csv():
     """Pulls full catalog from Upstox and converts it directly into a clean CSV string for local download."""
     try:
@@ -129,7 +145,6 @@ def fetch_and_prepare_csv():
             df_final.rename(columns={'tradingsymbol': 'Symbol', 'exchange': 'Exchange', 'name': 'Company Name'}, inplace=True)
             df_final['Sector'] = df_final['Symbol'].apply(lambda x: SECTOR_MAP.get(x, "Other / Diversified"))
             
-            # Encode directly to string stream
             return df_final.to_csv(index=False).encode('utf-8')
     except Exception as e:
         st.error(f"Failed to fetch Upstox catalog. Error: {e}")
@@ -188,8 +203,23 @@ def main():
 
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
-    # --- TAB 1: SCREENER (Now features local file physical download) ---
+    # --- TAB 1: SCREENER (Now features token input AND local file physical download) ---
     with tab_screener:
+        st.markdown("<div class='slbl'>Upstox API Authentication (v2)</div>", unsafe_allow_html=True)
+        if 'upstox_token' not in st.session_state:
+            st.session_state['upstox_token'] = ""
+            
+        token_input = st.text_input("Enter Upstox Access Token (v2)", value=st.session_state['upstox_token'], type="password")
+        
+        if token_input:
+            st.session_state['upstox_token'] = token_input
+            if check_upstox_token(token_input):
+                st.success("Upstox Status: Connected successfully!")
+            else:
+                st.error("Upstox Status: Disconnected. Invalid token.")
+        else:
+            st.warning("Upstox Status: Disconnected. Waiting for token input.")
+            
         st.markdown("<div class='slbl'>Upstox Manual Data Extraction</div>", unsafe_allow_html=True)
         st.caption("Pulls real-time physical CSV registries from the Upstox network and prepares it for local storage.")
         
@@ -205,7 +235,7 @@ def main():
             st.success("CSV compiled successfully! Click the button to save it locally.")
             st.info("Once downloaded, head over to Tab 2 to upload this identical file into your scanner profile.")
 
-    # --- TAB 2: DATABASE (Now features the drag-and-drop uploader) ---
+    # --- TAB 2: DATABASE (Drag-and-drop uploader) ---
     with tab_db:
         st.markdown("<div class='slbl'>Database Execution Gateway</div>", unsafe_allow_html=True)
         st.caption("Drag and drop the 'upstox_instruments.csv' file that you downloaded from Tab 1.")
@@ -214,13 +244,11 @@ def main():
         
         if uploaded_file is not None:
             try:
-                # Read the file the user just loaded up
                 st.session_state['uploaded_instruments'] = pd.read_csv(uploaded_file)
                 st.success("File ingested successfully! Full inventory mapped to memory.")
             except Exception as e:
                 st.error(f"Failed to read standard structure file. Trace: {e}")
                 
-        # Sub-layer separation
         db_source = st.radio("Select Active Data Ledger", ["Real-Time Scanned Results", "Uploaded Master Registry"])
         
         if db_source == "Real-Time Scanned Results":
@@ -235,7 +263,6 @@ def main():
             else:
                 df_master = st.session_state['uploaded_instruments']
                 
-                # Dynamic Plotly Bar Graph
                 sector_counts = df_master['Sector'].value_counts().reset_index()
                 sector_counts.columns = ['Sector', 'Count']
                 fig = go.Figure(data=[go.Bar(
@@ -259,19 +286,15 @@ def main():
         st.markdown("<div class='slbl'>Momentum Strategy Hub</div>", unsafe_allow_html=True)
         st.caption("Auto-checks candidates against defined EPS, RS Resilience, and price magnets around the 21EMA.")
         
-        # Pulls labels from the hardcoded groups
         options_list = list(INDICES_MAP.keys())
         
-        # Check if they have uploaded a custom file to add that to the options!
         if not st.session_state['uploaded_instruments'].empty:
             options_list.insert(0, "Full Uploaded CSV Pool")
             
         selected_index = st.selectbox("Select Target Pool to Scan", options_list)
         
-        # Auto-fill the scratchpad box
         if selected_index == "Full Uploaded CSV Pool":
             df_full_pool = st.session_state['uploaded_instruments']
-            # Limit pool scratchpad visual to avoid browser hanging
             loaded_tickers = ",".join(df_full_pool['Symbol'].head(300).tolist())
         else:
             loaded_tickers = INDICES_MAP[selected_index]
@@ -286,7 +309,6 @@ def main():
             scan_clicked = st.button("🔥 Run Momentum Scan")
 
         if scan_clicked:
-            # Bypass string limits if full CSV pool was requested
             if selected_index == "Full Uploaded CSV Pool":
                 tickers_list = st.session_state['uploaded_instruments']['Symbol'].tolist()
             else:
@@ -322,7 +344,6 @@ def main():
                 "21MA BUY ZONE": tab2_zones, "RS RESILIENT": tab2_res
             })
             
-            # Flex Cluster Sorting
             perfect_hits, other_results = [], []
             for r in momentum_results:
                 if r["live_px"] == 0.0: continue
@@ -331,7 +352,6 @@ def main():
                 else:
                     other_results.append(r)
             
-            # Draw Group 1
             st.markdown("<div class='group-header'>🔥 Group 1: Perfect Momentum Picks</div>", unsafe_allow_html=True)
             if perfect_hits:
                 for r in perfect_hits:
@@ -350,7 +370,6 @@ def main():
             else:
                 st.info("No assets met all 100% of the calculated momentum parameters.")
             
-            # Draw Group 2
             st.markdown("<div class='group-header'>📊 Group 2: Other Scanned Assets</div>", unsafe_allow_html=True)
             for r in other_results:
                 st.markdown(f"""
