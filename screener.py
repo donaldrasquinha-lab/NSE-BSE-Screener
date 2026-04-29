@@ -148,7 +148,7 @@ def main():
         
     # 🟢 THE CRITICAL FIX: Forces fallback to 0 if Streamlit returns None [1]
         selected_batch_idx = selected_batch_idx_raw if selected_batch_idx_raw is not None else 0
-        st.session_state['active_batch_idx'] = selected_batch_idx
+           st.session_state['active_batch_idx'] = selected_batch_idx
         
         # Execution pointers
         loop_start = selected_batch_idx * batch_size
