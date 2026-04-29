@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Upstox Token + Mass Index Download
+Tab 1: Upstox Token + Mass Index Download (Resolved v2 Auth)
 Tab 2: Master Instrument Grid Sorted by Sector + Graph
 Tab 3: Momentum Strategy Hub with Grouped Layouts
 
@@ -24,7 +24,7 @@ from plotly.subplots import make_subplots
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES & SECTOR MAP
 # ===========================================================================
-UPSTOX_BASE  = "https://upstox.com"
+UPSTOX_BASE  = "https://api.upstox.com/v2"
 
 # Hardcoded index asset mappings for standard and momentum scanning
 INDICES_MAP = {
@@ -73,8 +73,6 @@ SECTOR_MAP = {
 # ===========================================================================
 #  PAGE SETUP & CSS STYLING
 # ===========================================================================
-st.set_page_config(page_title="NSE+BSE Screener", page_icon="🚀", layout="wide", initial_sidebar_state="expanded")
-
 st.markdown("""
 <style>
 @import url('https://googleapis.com');
@@ -156,7 +154,7 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 # ===========================================================================
 
 def check_upstox_token(token: str) -> bool:
-    """Verifies Upstox Token validity by pinging the profile endpoint."""
+    """Verifies Upstox Token validity using the official API v2 profile endpoint."""
     clean_token = token.strip() if token else ""
     if not clean_token:
         return False
@@ -224,13 +222,6 @@ def main():
         st.session_state['scanned_df'] = pd.DataFrame()
     if 'master_instruments' not in st.session_state:
         st.session_state['master_instruments'] = pd.DataFrame()
-
-    st.markdown("""
-    <div class='hdr'>
-        <h1>NSE + BSE Multibagger Screener</h1>
-        <div class='sub'>V6.0 • HARDCODED INDEX MULTI-SCANNER</div>
-    </div>
-    """, unsafe_allow_html=True)
 
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
