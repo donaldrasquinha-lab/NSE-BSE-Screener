@@ -205,8 +205,7 @@ def main():
             try:
                 hist_6m = yf.Ticker(f"{symbol}.NS").history(period="6m")
                 if not hist_6m.empty:
-                    hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()
-                    fig = go.Figure(data=[go.Candlestick(x=hist
+                    hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()                                                    
                     fig = go.Figure(data=[
                         go.Candlestick(
                             x=hist_6m.index,
