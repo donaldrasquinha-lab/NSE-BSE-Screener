@@ -134,9 +134,9 @@ def main():
 
     with tab_screener:
         token_input = st.text_input("Enter Upstox Access Token (v2)", type="password")
-    if token_input:
-        if check_upstox_token(token_input): st.success("Upstox Status: Connected!")
-        else: st.error("Upstox Status: Invalid Token.")
+            if token_input:
+                if check_upstox_token(token_input): st.success("Upstox Status: Connected!")
+            else: st.error("Upstox Status: Invalid Token.")
             
         data_source = st.selectbox("Select Price/Data Source", ["Yahoo Finance", "Upstox"])
         target_index = st.selectbox("Select Target Pool to Scan", ["BSE 500 (Custom Input)", "Nifty 500", "Nifty 50"])
@@ -359,4 +359,4 @@ def main():
                 st.dataframe(df_momentum.sort_values(by='Sector').reset_index(drop=True), width='stretch')
 
 if __name__ == "__main__":
- main()
+     main()
