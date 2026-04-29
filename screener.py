@@ -21,11 +21,11 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & CONSTANTS
 # ===========================================================================
-UPSTOX_BASE  = "https://upstox.com"
+UPSTOX_BASE  = "https://api.upstox.com/v2"
 
 # 🟢 The safest and officially recognized segment specific paths for Upstox v2
-UPSTOX_NSE_URL = "https://upstox.com"
-UPSTOX_BSE_URL = "https://upstox.com"
+UPSTOX_NSE_URL = "https://api.upstox.com/v2"
+UPSTOX_BSE_URL = "https://api.upstox.com/v2"
 
 # Fallback mapping to populate clean sectors for known top assets
 SECTOR_MAP = {
