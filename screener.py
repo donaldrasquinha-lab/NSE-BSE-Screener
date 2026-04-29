@@ -496,49 +496,79 @@ def main():
                             st.plotly_chart(fig, use_container_width=True)
                     except Exception as e:
                         st.warning(f"Unable to load chart for {symbol}. Moving to next.")
-    # --- 🟢 TAB 5: SECTOR HEATMAP ---
+       # --- 🟢 TAB 5: SECTOR HEATMAP ---
     with tab_heatmap:
-                    # 1. Safely extract prices even if the column is missing or broken
+        st.markdown("<div class='slbl'>🗺️ Sector Heatmap Distribution</div>", unsafe_allow_html=True)
+        
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df'].copy()
+            
+            # 1. Safely extract and clean prices even if the column is missing or broken
             if 'Live Price' in df_full.columns:
                 df_full['Clean_Price'] = pd.to_numeric(
                     df_full['Live Price'].astype(str).str.replace('₹', '').str.replace(',', ''), 
                     errors='coerce'
                 ).fillna(1.0)
             else:
-                # Fallback if no prices were recorded in the session
                 df_full['Clean_Price'] = 1.0
             
-            # Ensure price is at least 1 to prevent division by zero in heatmap
+            # Ensure price is at least 1 to prevent division by zero in heatmap geometry
             df_full['Clean_Price'] = df_full['Clean_Price'].apply(lambda x: x if x > 0 else 1.0)
+            
+            # 2. Fill missing or blank sectors to prevent Plotly parent errors
+            if 'Sector' in df_full.columns:
+                df_full['Sector'] = df_full['Sector'].fillna("Other / Diversified").replace("", "Other / Diversified")
+            else:
+                df_full['Sector'] = "Other / Diversified"
 
+            # 3. Build the hierarchical arrays required by Plotly Treemap
+            sectors = df_full['Sector'].unique().tolist()
+            symbols = df_full['Symbol'].tolist()
             
-            # Create interactive treemap heatmap
-            fig_hm = go.Figure(go.Treemap(
-                labels=df_full['Symbol'],
-                parents=df_full['Sector'],
-                values=df_full['Clean_Price'],
-                textinfo="label+value",
-                marker=dict(
-                    colorscale='Electric',
-                    showscale=True
+            # Labels: Sectors act as parent boxes, Symbols act as internal children boxes
+            labels = sectors + symbols
+            
+            # Parents: Sectors sit at the root (empty string), Symbols belong to their specific Sector
+            parents = ["" for _ in sectors] + df_full['Sector'].tolist()
+            
+            # Values: Sectors get the total sum of their symbols' prices to scale the big box correctly
+            sector_sums = df_full.groupby('Sector')['Clean_Price'].sum().to_dict()
+            values = [sector_sums[sec] for sec in sectors] + df_full['Clean_Price'].tolist()
+            
+            # 4. Create and render the Treemap
+            try:
+                fig_hm = go.Figure(go.Treemap(
+                    labels=labels,
+                    parents=parents,
+                    values=values,
+                    textinfo="label+value",
+                    marker=dict(
+                        colorscale='Blues',  # Clean blue scale matching your UI grid rules
+                        showscale=True
+                    )
+                ))
+                
+                fig_hm.update_layout(
+                    title="<b>Scanned Portfolio Mapped by Sector (Box size = Price)</b>",
+                    title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
+                    height=600,
+                    margin=dict(l=10, r=10, t=50, b=10)
                 )
-            ))
+                
+                st.plotly_chart(fig_hm, use_container_width=True)
+                
+            except Exception as e:
+                st.error(f"Plotly could not build the tree. Fallback triggered. Error: {e}")
             
-            fig_hm.update_layout(
-                title="<b>Scanned Portfolio Mapped by Sector (Box size = Stock Price)</b>",
-                title_font=dict(color="#f0f4ff"),
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='#a8b4cc'),
-                height=600,
-                margin=dict(l=10, r=10, t=50, b=10)
-            )
-            
-            st.plotly_chart(fig_hm, use_container_width=True)
-            
-            # Secondary sorted grid visual
+            # 5. Secondary Grid Visual
             st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
             st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
+
 
 if __name__ == "__main__":
 
