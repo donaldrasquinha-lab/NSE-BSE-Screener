@@ -381,7 +381,8 @@ tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["Screener
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-    # --- 🟢 TAB 4: MOMENTUM HUB WITH CHARTS ---
+
+# --- 🟢 TAB 4: MOMENTUM HUB WITH CHARTS ---
     with tab_charts:
         st.markdown("<div class='slbl'>🎯 Active Momentum Executions</div>", unsafe_allow_html=True)
         if st.session_state['scanned_df'].empty:
@@ -452,7 +453,8 @@ tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["Screener
                             st.plotly_chart(fig, use_container_width=True)
                     except Exception as e:
                         st.warning(f"Unable to load chart for {symbol}. Moving to next.")
-    # --- 🟢 TAB 5: SECTOR HEATMAP ---
+
+# --- 🟢 TAB 5: SECTOR HEATMAP ---
     with tab_heatmap:
         st.markdown("<div class='slbl'>🗺️ Sector Heatmap Distribution</div>", unsafe_allow_html=True)
         if st.session_state['scanned_df'].empty:
