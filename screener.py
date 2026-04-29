@@ -187,7 +187,7 @@ def main():
             st.session_state['active_batch_idx'] = 0
             st.session_state['auto_run'] = False
             st.rerun()
-        st.dataframe(st.session_state['scanned_df'].sort_values(by='Symbol').reset_index(drop=True), width='stretch'
+        st.dataframe(st.session_state['scanned_df'].sort_values(by='Symbol').reset_index(drop=True), width='stretch')
 
     with tab_momentum:
         df_full = st.session_state['scanned_df']
