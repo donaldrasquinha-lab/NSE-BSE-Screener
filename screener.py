@@ -241,7 +241,7 @@ def main():
 tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"])
 
 # --- TAB 1: SCREENER ---
-    with tab_screener:
+with tab_screener:
         st.markdown("<div class='slbl'>Upstox API Authentication (v2)</div>", unsafe_allow_html=True)
         if 'upstox_token' not in st.session_state:
             st.session_state['upstox_token'] = ""
