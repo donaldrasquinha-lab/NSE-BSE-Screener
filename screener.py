@@ -196,100 +196,167 @@ def main():
         for r in other_results:
             st.markdown(f"<div class='scard'><div class='ch'><div class='sym'>{r['Symbol']}</div><div class='live-px'>₹{r['Live Price']}</div></div></div>", unsafe_allow_html=True)
 
+    # --- 🎯 TAB 4: MOMENTUM HUB (LIVE VS SECTOR) ---
     with tab_charts:
-        df_full = st.session_state['scanned_df']
-        perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')]
+        st.markdown("<div class='slbl'>🎯 Active Momentum Executions</div>", unsafe_allow_html=True)
         
-        for idx, row in perfect_hits.iterrows():
-            symbol = row['Symbol']
-            try:
-                hist_6m = yf.Ticker(f"{symbol}.NS").history(period="6m")
-                if not hist_6m.empty:
-                    hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()                                                    
-                    fig = go.Figure(data=[
-                        go.Candlestick(
-                            x=hist_6m.index,
-                            open=hist_6m['Open'],
-                            high=hist_6m['High'],
-                            low=hist_6m['Low'],
-                            close=hist_6m['Close'],
-                            name="Candles"
-                        ),
-                        go.Scatter(
-                            x=hist_6m.index, 
-                            y=hist_6m['21EMA'], 
-                            mode='lines', 
-                            line=dict(color='#fb923c', width=1.5), 
-                            name="21 EMA"
-                        )
-                    ])
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df']
+            
+            # Isolate only 100% compliant momentum setups
+            perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')]
+            
+            if perfect_hits.empty:
+                st.info("No perfect momentum fits detected in the current scanned array.")
+            else:
+                # Calculate dynamic sector averages directly from active DB
+                sector_averages = df_full.groupby('Sector')['Live Price'].mean().to_dict()
+                
+                st.write(f"Found **{len(perfect_hits)}** highly optimized momentum setups:")
+                
+                for idx, row in perfect_hits.iterrows():
+                    symbol = row['Symbol']
+                    live_px = row['Live Price']
+                    sector = row['Sector']
                     
-                    fig.update_layout(
-                        xaxis_rangeslider_visible=False,
+                    # Fetch the calculated average price for this stock's specific sector
+                    sector_index_px = round(sector_averages.get(sector, live_px), 2)
+                    
+                    st.markdown(f"""
+                    <div class="scard hit">
+                        <div class="ribbon">🔥 MOMENTUM PICK</div>
+                        <div class="ch">
+                            <div class="sym">{symbol} <span style="font-size:0.75rem; color:var(--t3);">({sector})</span></div>
+                            <div class="live-px">₹{live_px}</div>
+                        </div>
+                        <div class="mgrid">
+                            <div class="met">
+                                <div class="ml">LIVE PRICE</div>
+                                <div class="mv">₹{live_px}</div>
+                            </div>
+                            <div class="met">
+                                <div class="ml">SECTOR IND_AVG</div>
+                                <div class="mv">₹{sector_index_px}</div>
+                            </div>
+                            <div class="met">
+                                <div class="ml">PRICE VS SECTOR</div>
+                                <div class="mv" style="color:{'var(--sage)' if live_px >= sector_index_px else 'var(--amber)'};">
+                                    {'+' if live_px >= sector_index_px else ''}{round(live_px - sector_index_px, 2)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Candlestick chart remains attached below the comparison card
+                    try:
+                        ticker_data = yf.Ticker(f"{symbol}.NS")
+                        hist_6m = ticker_data.history(period="6m")
+                        
+                        if not hist_6m.empty:
+                            hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()
+                            
+                            fig = go.Figure(data=[
+                                go.Candlestick(
+                                    x=hist_6m.index,
+                                    open=hist_6m['Open'],
+                                    high=hist_6m['High'],
+                                    low=hist_6m['Low'],
+                                    close=hist_6m['Close'],
+                                    name="Candles"
+                                ),
+                                go.Scatter(
+                                    x=hist_6m.index, 
+                                    y=hist_6m['21EMA'], 
+                                    mode='lines', 
+                                    line=dict(color='#fb923c', width=1.5), 
+                                    name="21 EMA"
+                                )
+                            ])
+                            
+                            fig.update_layout(
+                                xaxis_rangeslider_visible=False,
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
+                                xaxis=dict(gridcolor='#1e2740'),
+                                yaxis=dict(gridcolor='#1e2740'),
+                                height=350,
+                                margin=dict(l=10, r=10, t=20, b=20)
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                    except Exception:
+                        pass
+
+
+        # --- 🗺️ TAB 5: SECTOR HEATMAP (MOMENTUM ONLY) ---
+    with tab_heatmap:
+        st.markdown("<div class='slbl'>🗺️ Momentum Sector Heatmap</div>", unsafe_allow_html=True)
+        
+        if st.session_state['scanned_df'].empty:
+            st.info("Database empty. You must process stocks on Tab 1 first.")
+        else:
+            df_full = st.session_state['scanned_df'].copy()
+            
+            # Isolate ONLY perfect momentum picks for the heatmap
+            df_momentum = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')].copy()
+            
+            if df_momentum.empty:
+                st.info("No momentum picks identified yet. Heatmap cannot populate without qualified hits.")
+            else:
+                # Safely parse and scale numeric prices
+                if 'Live Price' in df_momentum.columns:
+                    df_momentum['Clean_Price'] = pd.to_numeric(
+                        df_momentum['Live Price'].astype(str).str.replace('₹', '').str.replace(',', ''), 
+                        errors='coerce'
+                    ).fillna(1.0)
+                else:
+                    df_momentum['Clean_Price'] = 1.0
+                
+                df_momentum['Clean_Price'] = df_momentum['Clean_Price'].apply(lambda x: x if x > 0 else 1.0)
+                
+                # Fill blanks
+                df_momentum['Sector'] = df_momentum['Sector'].fillna("Other / Diversified").replace("", "Other / Diversified")
+    
+                # Build tree arrays mapped strictly to momentum hits
+                sectors = df_momentum['Sector'].unique().tolist()
+                symbols = df_momentum['Symbol'].tolist()
+                
+                labels = sectors + symbols
+                parents = ["" for _ in sectors] + df_momentum['Sector'].tolist()
+                
+                sector_sums = df_momentum.groupby('Sector')['Clean_Price'].sum().to_dict()
+                values = [sector_sums[sec] for sec in sectors] + df_momentum['Clean_Price'].tolist()
+                
+                try:
+                    fig_hm = go.Figure(go.Treemap(
+                        labels=labels,
+                        parents=parents,
+                        values=values,
+                        textinfo="label+value",
+                        marker=dict(colorscale='Blues', showscale=True)
+                    ))
+                    
+                    fig_hm.update_layout(
+                        title="<b>Momentum Picks Mapped by Sector (Box size = Price)</b>",
+                        title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(color='#a8b4cc'),
-                        xaxis=dict(gridcolor='#1e2740'),
-                        yaxis=dict(gridcolor='#1e2740'),
-                        height=400,
-                        margin=dict(l=10, r=10, t=20, b=20)
+                        font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
+                        height=500,
+                        margin=dict(l=10, r=10, t=50, b=10)
                     )
-                    st.plotly_chart(fig, use_container_width=True)
-            except Exception:
-                st.warning(f"Unable to load chart for {symbol}.")
-
-    with tab_heatmap:
-        st.markdown("<div class='slbl'>🗺️ Sector Heatmap Distribution</div>", unsafe_allow_html=True)
-        df_full = st.session_state['scanned_df'].copy()
-        
-        if df_full.empty:
-            st.info("No scanned assets in registry. Go to Tab 1 and click the 'Process' button.")
-        else:
-            # Clean prices for heatmap sizing safely
-            df_full['Clean_Price'] = pd.to_numeric(
-                df_full['Live Price'].astype(str).str.replace('₹', '').str.replace(',', ''), 
-                errors='coerce'
-            ).fillna(1.0)
-            df_full['Clean_Price'] = df_full['Clean_Price'].apply(lambda x: x if x > 0 else 1.0)
-            
-            # Fill missing or blank sectors to prevent Plotly parent errors
-            df_full['Sector'] = df_full['Sector'].fillna("Other / Diversified").replace("", "Other / Diversified")
-
-            # Build the hierarchical arrays required by Plotly Treemap
-            sectors = df_full['Sector'].unique().tolist()
-            symbols = df_full['Symbol'].tolist()
-            
-            labels = sectors + symbols
-            parents = ["" for _ in sectors] + df_full['Sector'].tolist()
-            
-            sector_sums = df_full.groupby('Sector')['Clean_Price'].sum().to_dict()
-            values = [sector_sums[sec] for sec in sectors] + df_full['Clean_Price'].tolist()
-            
-            try:
-                fig_hm = go.Figure(go.Treemap(
-                    labels=labels,
-                    parents=parents,
-                    values=values,
-                    textinfo="label+value",
-                    marker=dict(colorscale='Blues', showscale=True)
-                ))
+                    st.plotly_chart(fig_hm, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"Plotly could not build the tree. Error: {e}")
                 
-                fig_hm.update_layout(
-                    title="<b>Scanned Portfolio Mapped by Sector (Box size = Price)</b>",
-                    title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
-                    height=600,
-                    margin=dict(l=10, r=10, t=50, b=10)
-                )
-                st.plotly_chart(fig_hm, use_container_width=True)
-                
-            except Exception as e:
-                st.error(f"Plotly could not build the tree. Error: {e}")
-            
-            st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
-            st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
+                # Visual backup grid
+                st.markdown("<div class='slbl'>Momentum Picks Ledger</div>", unsafe_allow_html=True)
+                st.dataframe(df_momentum.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
+
 
 if __name__ == "__main__":
     main()
