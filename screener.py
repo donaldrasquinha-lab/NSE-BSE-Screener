@@ -17,116 +17,77 @@ import pandas as pd
 import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
-import logging
-
-# Configure logging for fallback tracking
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
 UPSTOX_BASE = "https://api.upstox.com/v2"
 
-# [TICKERS CONFIGURATION - UNCHANGED]
+# Hardcoded massive pool mapped exactly to your prompt input
 BSE_500_TICKERS = (
     "GRSE,ETERNAL,RELIANCE,BANDHANBNK,VEDL,MAZDOCK,HDFCBANK,SUNPHARMA,COCHINSHIP,CEATLTD,"
-    # ... (keep your full ticker list)
-    "TRAVELFOOD"
+    "M&M,SBIN,ADANIPOWER,MARUTI,GROWW,COALINDIA,ICICIBANK,BSE,DATAPATTNS,EMMVEE,ONGC,"
+    "TENNIND,CHENNPETRO,BHARTIARTL,NETWEB,INFY,MCX,ITC,DIXON,SCI,ADANIENT,RECLTD,IDEA,"
+    "SUZLON,TATASTEEL,AXISBANK,RBLBANK,LT,GMDCLTD,JIOFIN,STARHEALTH,CROMPTON,DRREDDY,"
+    "INDIGO,OFSS,HCLTECH,TCS,WAAREEENER,SHRIRAMFIN,PFC,GODFRYPHLP,ATGL,BAJFINANCE,TMPV,"
+    "GESHIP,JPPOWER,VBL,COHANCE,ADANIGREEN,BPCL,SWIGGY,POWERINDIA,INDUSTOWER,ADANIPORTS,"
+    "ENRIN,HSCL,SWANCORP,EMCURE,TECHM,LODHA,NESTLEIND,SAIL,HINDZINC,FORCEMOT,BHEL,PERSISTENT,"
+    "NATIONALUM,SAMMAANCAP,KAYNES,BHARATFORG,ULTRACEMCO,INDUSINDBK,PIRAMALFIN,TATAPOWER,ADANIENSOL,"
+    "WELCORP,TVSMOTOR,EICHERMOT,HINDUNILVR,HINDALCO,NMDC,BAJAJ-AUTO,BEL,TATACHEM,PAYTM,JSWSTEEL,"
+    "CANBK,GVT&D,ASHOKLEY,NHPC,TRENT,OIL,HDFCLIFE,HAL,WIPRO,OLAELEC,UNIONBANK,BRITANNIA,MAHABANK,"
+    "TMCV,ABCAPITAL,NTPC,AWL,HAVELLS,POWERGRID,HINDCOPPER,HEROMOTOCO,YESBANK,SONACOMS,HFCL,"
+    "NAUKRI,ABB,CDSL,JAINREC,KOTAKBANK,IDFCFIRSTB,AUROPHARMA,POLYCAB,KEI,BDL,TITAN,FEDERALBNK,"
+    "RVNL,ATHERENERG,APOLLOHOSP,NAVINFLUOR,SAPPHIRE,INDIANB,JKTYRE,TARIL,MAXHEALTH,COFORGE,IGL,"
+    "EXIDEIND,JSWENERGY,PNB,GRASIM,MOTHERSON,FIVESTAR,RPOWER,HDFCAMC,POLICYBZR,IIFL,GLENMARK,"
+    "CONCORDBIO,CGPOWER,LAURUSLABS,MRF,TEJASNET,MRPL,BLUESTARCO,ASTRAL,HYUNDAI,GAIL,PPLPHARMA,"
+    "CUMMINSIND,APARINDS,IOC,GODREJPROP,MUTHOOTFIN,DLF,BANKBARODA,SBILIFE,HINDPETRO,SBICARD,"
+    "ONESOURCE,ASIANPAINT,MSUMI,TATAELXSI,KALYANKJIL,LLOYDSME,ANGELONE,SUPREMEIND,J&KBANK,NLCINDIA,"
+    "MOTILALOFS,CANHLIFE,LUPIN,M&MFIN,PNBHOUSING,JINDALSTEL,AMBER,TATACONSUM,SOLARINDS,LENSKART,"
+    "OLECTRA,BAJAJFINSV,NTPCGREEN,KPITTECH,INDHOTEL,BOSCHLTD,PETRONET,JUBLFOOD,RKFORGE,REDINGTON,"
+    "GMRAIRPORT,SRF,RRKABEL,AUBANK,ABSLAMC,DIVISLAB,UPL,UNOMINDA,NAM-INDIA,JINDALSAW,HBLENGINE,"
+    "CGCL,BANKINDIA,JYOTICNC,ZEEL,IRFC,VOLTAS,MPHASIS,DMART,ZENTEC,MANAPPURAM,PGEL,SHYAMMETL,"
+    "IREDA,LTM,CIPLA,CONCOR,SYRMA,DALBHARAT,LICHSGFIN,IEX,LTF,PIIND,PHOENIXLTD,HUDCO,HEG,CHOLAFIN,"
+    "GRAPHITE,DEVYANI,GPIL,INOXWIND,KIRLOSENG,AARTIIND,UNITDSPR,ENGINERSIN,LICI,PWL,NCC,APOLLOTYRE,"
+    "ACUTAAS,ANANDRATHI,KIMS,LGEINDIA,ITCHOTELS,SIEMENS,VMM,RADICO,ANANTRAJ,POONAWALLA,GRANULES,"
+    "TORNTPHARM,NBCC,INDIACEM,COLPAL,AMBUJACEM,PREMIERENE,IFCI,CUB,BALRAMCHIN,TORNTPOWER,ZYDUSLIFE,"
+    "TATACAP,360ONE,IDBI,BIOCON,IRCTC,ARE&M,MEESHO,BAJAJHFL,PCBL,CAMS,FORTIS,TRITURBINE,BEML,AFFLE,"
+    "PARADEEP,ICICIGI,DELHIVERY,MANKIND,INTELLECT,APLAPOLLO,CESC,ELGIEQUIP,IRCON,JWL,WOCKPHARMA,"
+    "SJVN,NATCOPHARM,JBMA,OBEROIRLTY,KEC,TITAGARH,NYKAA,DEEPAKFERT,KARURVYSYA,JBCHEPHARM,DEEPAKNTR,"
+    "MFSL,TIINDIA,ABFRL,ICICIAMC,CEMPRO,SAILIFE,KFINTECH,MARICO,PAGEIND,TATATECH,GILLETTE,ZENSARTECH,"
+    "JSWINFRA,LEMONTREE,BALKRISIND,CHOICEIN,CARTRADE,PRESTIGE,THELEELA,NSLNISP,RAILTEL,FACT,NEWGEN,"
+    "GLAXO,GODREJCP,LINDEINDIA,TATAINVEST,USHAMART,TATACOMM,IKS,CASTROLIND,GRAVITA,CYIENT,BELRISE,"
+    "COROMANDEL,ASTERDM,WHIRLPOOL,JSL,PIDILITIND,CLEAN,PATANJALI,LTFOODS,SARDAEN,ACMESOLAR,THERMAX,"
+    "DABUR,FINCABLES,NH,URBANCO,ABREL,GALLANTT,LALPATHLAB,FSL,SAGILITY,ICICIPRULI,HOMEFIRST,"
+    "SONATSOFTW,NEULANDLAB,TRIDENT,PVRINOX,SYNGENE,IOB,CPPLUS,SIGNATURE,ALKEM,CCL,ESCORTS,FLUOROCHEM,"
+    "ELECON,SCHAEFFLER,ATUL,GODREJIND,IRB,LTTS,FIRSTCRY,ECLERX,ENDURANCE,SUNTV,SOBHA,ABBOTINDIA,"
+    "APTUS,VTL,JMFINANCIL,SHREECEM,BSOFT,ITI,KAJARIACER,CRAFTSMAN,CREDITACC,CHAMBLFERT,TECHNOE,"
+    "CHOLAHLDNG,SUNDARMFIN,AFCONS,CARBORUNIV,BHARTIHEXA,ACC,AN_THEM,SCHNEIDER,BAJAJHLDNG,PINELABS,"
+    "AEGISLOG,MINDACORP,IPCALAB,CANFINHOME,CENTRALBK,NUVAMA,BLS,NIVABUPA,UCOBANK,NAVA,WELSPUNLIV,"
+    "AJANTPHARM,GICRE,MEDANTA,JUBLPHARMA,3MINDIA,LATENTVIEW,GABRIEL,TTML,GODIGIT,EMAMILTD,RAINBOW,"
+    "JKCEMENT,INDGN,ACE,HDBFS,INDIAMART,ABDL,BLUEJET,POLYMED,ZYDUSWELL,CRISIL,KPRMILL,AEGISVOPAK,"
+    "HEXT,GSPL,MMTC,MGL,AADHARHFC,UBL,ASAHIINDIA,BATAINDIA,EIDPARRY,NUVOCO,DOMS,UTIAMC,NIACL,"
+    "HONASA,BIKAJI,RAMCOCEM,ZFCVINDIA,ANURAS,AIIL,JSWCEMENT,IGIL,HONAUT,SBFC,RITES,CAPLIPOINT,"
+    "BRIGADE,SPLPETRO,ERIS,PTCIL,MAPMYINDIA,BAYERCROP,AAVAS,TEGA,SAREGAMA,TBOTEK,VIJAYA,DCMSHRIRAM,"
+    "AIAENG,GLAND,TIMKEN,JUBLINGREA,CHALET,BERGEPAINT,BBTC,EIHOTEL,KPIL,SUMICHEM,ABLBL,BLUEDART,"
+    "PFIZER,RHIM,JSWDULUX,TRAVELFOOD"
 )
 
 NIFTY_50_TICKERS = (
     "RELIANCE,TCS,HDFCBANK,ICICIBANK,INFY,BHARTIARTL,HINDUNILVR,ITC,SBIN,LTIM,ADANIENT,ADANIPORTS,"
-    # ... (keep your full ticker list)
-    "WIPRO"
+    "ASIANPAINT,AXISBANK,BAJAJ-AUTO,BAJFINANCE,BAJAJFINSV,BPCL,BRITANNIA,CIPLA,COALINDIA,DIVISLAB,"
+    "DRREDDY,EICHERMOT,GRASIM,HCLTECH,HEROMOTOCO,HINDALCO,INDUSINDBK,JSWSTEEL,KOTAKBANK,LT,M&M,"
+    "MARUTI,NESTLEIND,NTPC,ONGC,POWERGRID,SBILIFE,SUNPHARMA,TATACONSUM,TATAMOTORS,TATASTEEL,TECHM,"
+    "TITAN,ULTRACEMCO,UPL,WIPRO"
 )
 
+# Baseline Sector mapping for fallbacks
 SECTOR_MAP = {
-    "HDFCBANK": "Financial Services", "ICICIBANK": "Financial Services", 
-    # ... (keep your full sector map)
-    "TITAN": "Consumer Durables"
+    "HDFCBANK": "Financial Services", "ICICIBANK": "Financial Services", "SBIN": "Financial Services", 
+    "AXISBANK": "Financial Services", "KOTAKBANK": "Financial Services", "BAJFINANCE": "Financial Services",
+    "BAJAJFINSV": "Financial Services", "TCS": "IT", "INFY": "IT", "HCLTECH": "IT", "TECHM": "IT", "WIPRO": "IT", 
+    "RELIANCE": "Energy / Oil & Gas", "HINDUNILVR": "FMCG", "ITC": "FMCG", "TATAMOTORS": "Automobile", 
+    "M&M": "Automobile", "SUNPHARMA": "Pharma / Healthcare", "TITAN": "Consumer Durables"
 }
-
-# ===========================================================================
-#  HELPER FUNCTIONS FOR FALLBACK & ERROR HANDLING
-# ===========================================================================
-
-def safe_extract_price(price_value):
-    """Safely extract numeric price from various formats."""
-    try:
-        if isinstance(price_value, (int, float)):
-            return float(price_value)
-        if isinstance(price_value, str):
-            clean = price_value.replace('₹', '').replace(',', '').strip()
-            return float(clean) if clean else 1.0
-        return 1.0
-    except Exception as e:
-        logger.warning(f"Price extraction failed for {price_value}: {e}. Using fallback 1.0")
-        return 1.0
-
-def safe_build_treemap_data(df):
-    """Safely build hierarchical data for Plotly Treemap with fallback."""
-    try:
-        if df.empty:
-            logger.warning("DataFrame is empty, returning minimal treemap structure")
-            return {
-                "labels": ["No Data"],
-                "parents": [""],
-                "values": [1],
-            }
-        
-        # Clean and validate data
-        df = df.copy()
-        df['Clean_Price'] = df['Live Price'].apply(safe_extract_price)
-        df['Sector'] = df['Sector'].fillna("Other / Diversified").replace("", "Other / Diversified")
-        
-        sectors = df['Sector'].unique().tolist()
-        symbols = df['Symbol'].tolist()
-        
-        labels = sectors + symbols
-        parents = ["" for _ in sectors] + df['Sector'].tolist()
-        
-        sector_sums = df.groupby('Sector')['Clean_Price'].sum().to_dict()
-        values = [sector_sums[sec] for sec in sectors] + df['Clean_Price'].tolist()
-        
-        return {
-            "labels": labels,
-            "parents": parents,
-            "values": values,
-        }
-    except Exception as e:
-        logger.error(f"Treemap data building failed: {e}. Using fallback structure")
-        return {
-            "labels": ["Error: Unable to build map"],
-            "parents": [""],
-            "values": [1],
-        }
-
-def render_treemap(data, title="Sector Distribution"):
-    """Render treemap with error handling and fallback."""
-    try:
-        fig = go.Figure(go.Treemap(
-            labels=data["labels"],
-            parents=data["parents"],
-            values=data["values"],
-            textinfo="label+value",
-            marker=dict(colorscale='Blues', showscale=True)
-        ))
-        
-        fig.update_layout(
-            title=f"<b>{title}</b>",
-            title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
-            height=600,
-            margin=dict(l=10, r=10, t=50, b=10)
-        )
-        
-        return fig, None
-    except Exception as e:
-        logger.error(f"Treemap rendering failed: {e}")
-        return None, f"Chart rendering failed: {str(e)}"
 
 # ===========================================================================
 #  PAGE SETUP & CSS STYLING
@@ -199,12 +160,11 @@ def check_upstox_token(token: str) -> bool:
     try:
         response = requests.get(url, headers=headers, timeout=5)
         return response.status_code == 200
-    except Exception as e:
-        logger.warning(f"Upstox token check failed: {e}")
+    except Exception:
         return False
 
 def pull_upstox_price(symbol: str, token: str, exchange: str) -> float:
-    """Retrieves live last traded price from Upstox API with fallback."""
+    """Retrieves live last traded price from Upstox API."""
     inst_key = f"NSE_EQ|{symbol}" if exchange == "NSE" else f"BSE_EQ|{symbol}"
     url = f"{UPSTOX_BASE}/market-quote/quotes"
     headers = {'Accept': 'application/json', 'Authorization': f'Bearer {token}', 'Api-Version': '2.0'}
@@ -214,12 +174,12 @@ def pull_upstox_price(symbol: str, token: str, exchange: str) -> float:
         if resp.status_code == 200:
             data = resp.json()
             return data['data'][inst_key]['last_price']
-    except Exception as e:
-        logger.warning(f"Upstox price pull failed for {symbol}: {e}. Fallback to Yahoo Finance")
+    except:
+        pass
     return 0.0
 
 def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange: str = "NSE") -> dict:
-    """Calculates momentum matrix with comprehensive error handling and fallback."""
+    """Calculates momentum matrix dynamically via Yahoo or Upstox."""
     res = {
         "Symbol": symbol, "Live Price": 0.0, "EPS Accel": "No Data", 
         "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", "Sector": SECTOR_MAP.get(symbol, "Other")
@@ -230,26 +190,19 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
     
     # Attempt Upstox price fetch
     if source == "Upstox" and token:
-        try:
-            close_px = pull_upstox_price(symbol, token, exchange)
-        except Exception as e:
-            logger.warning(f"Upstox fetch failed for {symbol}: {e}. Continuing with Yahoo")
+        close_px = pull_upstox_price(symbol, token, exchange)
         
-    # Execution via Yahoo Finance with comprehensive error handling
+    # Execution via Yahoo Finance
     try:
         stock = yf.Ticker(yf_symbol)
         hist = stock.history(period="1y")
-        
-        if hist.empty:
-            logger.warning(f"No historical data for {symbol}")
-            return res
+        if hist.empty: return res
         
         if close_px == 0.0:
             close_px = hist['Close'].iloc[-1]
             
         hist['21EMA'] = hist['Close'].ewm(span=21, adjust=False).mean()
         ema_21 = hist['21EMA'].iloc[-1]
-        
         if close_px > ema_21 and close_px < (ema_21 * 1.025):
             res["21MA Buy Zone"] = "🔥 HIT"
             
@@ -257,19 +210,15 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
         if (close_px / wh_52) >= 0.85:
             res["RS Resilient"] = "✅ YES"
             
-        try:
-            info = stock.info
-            if "sector" in info and info["sector"]:
-                res["Sector"] = info["sector"]
-            if "forwardEps" in info and "trailingEps" in info:
-                if info["forwardEps"] is not None and info["trailingEps"] is not None:
-                    res["EPS Accel"] = "✅ Yes" if info["forwardEps"] > info["trailingEps"] else "❌ No"
-        except Exception as e:
-            logger.warning(f"Stock info extraction failed for {symbol}: {e}")
+        info = stock.info
+        if "sector" in info:
+            res["Sector"] = info["sector"]
+        if "forwardEps" in info and "trailingEps" in info:
+            if info["forwardEps"] is not None and info["trailingEps"] is not None:
+                res["EPS Accel"] = "✅ Yes" if info["forwardEps"] > info["trailingEps"] else "❌ No"
+    except:
+        pass
             
-    except Exception as e:
-        logger.error(f"Momentum calculation failed for {symbol}: {e}")
-        
     res["Live Price"] = round(close_px, 2)
     return res
 
@@ -280,9 +229,7 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
 def main():
     # 🟢 STATE INITIALIZATION: Ensures continuous addition of lists
     if 'scanned_df' not in st.session_state:
-        st.session_state['scanned_df'] = pd.DataFrame(
-            columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"]
-        )
+        st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
 
     st.markdown("""
     <div class='hdr'>
@@ -291,9 +238,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(
-        ["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"]
-    )
+    tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
     # --- TAB 1: SCREENER ---
     with tab_screener:
@@ -360,31 +305,23 @@ def main():
             processed_results = []
             
             for idx, symbol in enumerate(execution_pool):
-                try:
-                    status_box.text(f"Extracting [{data_source}]: {symbol}")
-                    data_node = calculate_momentum_node(symbol, data_source, st.session_state['upstox_token'], exch)
-                    processed_results.append(data_node)
-                except Exception as e:
-                    logger.error(f"Failed to process {symbol}: {e}")
-                    # Add fallback entry
-                    processed_results.append({
-                        "Symbol": symbol, "Live Price": 0.0, "EPS Accel": "Error",
-                        "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", 
-                        "Sector": SECTOR_MAP.get(symbol, "Other")
-                    })
+                status_box.text(f"Extracting [{data_source}]: {symbol}")
+                
+                data_node = calculate_momentum_node(symbol, data_source, st.session_state['upstox_token'], exch)
+                processed_results.append(data_node)
                 prog_bar.progress((idx + 1) / len(execution_pool))
                 
             status_box.success("Scan cluster limits hit successfully!")
             
             # 🟢 CONTINUOUS APPENDING LOGIC
-            if processed_results:
-                new_df = pd.DataFrame(processed_results)
-                combined_df = pd.concat([st.session_state['scanned_df'], new_df], ignore_index=True)
-                combined_df.drop_duplicates(subset=["Symbol"], keep='last', inplace=True)
-                st.session_state['scanned_df'] = combined_df
-                st.success(f"✅ Added {len(new_df)} records. Database now has {len(combined_df)} unique assets.")
-            else:
-                st.error("❌ No data could be processed. Check logs for details.")
+            new_df = pd.DataFrame(processed_results)
+            
+            # Pull old list, combine with new, and remove duplicates keeping the newest data
+            combined_df = pd.concat([st.session_state['scanned_df'], new_df])
+            combined_df.drop_duplicates(subset=["Symbol"], keep='last', inplace=True)
+            
+            # Save the extended list back to session state
+            st.session_state['scanned_df'] = combined_df
 
     # --- TAB 2: DATABASE ---
     with tab_db:
@@ -393,33 +330,17 @@ def main():
         if st.session_state['scanned_df'].empty:
             st.info("No scanned assets in registry. Go to Tab 1 and click the 'Process' button.")
         else:
-            df_full = st.session_state['scanned_df'].copy()
-            
             col_db1, col_db2 = st.columns([5, 1])
             with col_db1:
-                st.write(f"📊 Currently holding **{len(df_full)}** unique processed assets.")
+                st.write(f"📊 Currently holding **{len(st.session_state['scanned_df'])}** unique processed assets.")
             with col_db2:
+                # Button to clear session memory
                 if st.button("🗑️ Clear Database"):
-                    st.session_state['scanned_df'] = pd.DataFrame(
-                        columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"]
-                    )
+                    st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
                     st.rerun()
 
-            # Build and render treemap safely
-            treemap_data = safe_build_treemap_data(df_full)
-            fig, error_msg = render_treemap(treemap_data, "Scanned Portfolio Mapped by Sector (Box size = Price)")
-            
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-            elif error_msg:
-                st.error(f"📊 {error_msg}")
-            
-            st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
-            try:
-                st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
-            except Exception as e:
-                logger.error(f"DataFrame display failed: {e}")
-                st.dataframe(df_full, use_container_width=True)
+            df_full = st.session_state['scanned_df']
+            st.dataframe(df_full.sort_values(by='Symbol').reset_index(drop=True), use_container_width=True)
 
     # --- TAB 3: MOMENTUM STRATEGY HUB ---
     with tab_momentum:
@@ -460,103 +381,6 @@ def main():
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-
-    # --- TAB 4: MOMENTUM HUB WITH CHARTS ---
-    with tab_charts:
-        st.markdown("<div class='slbl'>🎯 Active Momentum Executions</div>", unsafe_allow_html=True)
-        if st.session_state['scanned_df'].empty:
-            st.info("Database empty. You must process stocks on Tab 1 first.")
-        else:
-            df_full = st.session_state['scanned_df']
-            perfect_hits = df_full[(df_full['RS Resilient'] == '✅ YES') & (df_full['21MA Buy Zone'] == '🔥 HIT')]
-            
-            if perfect_hits.empty:
-                st.info("No perfect momentum fits detected in the current scanned array.")
-            else:
-                st.write(f"Found **{len(perfect_hits)}** highly optimized momentum setups:")
-                
-                for idx, row in perfect_hits.iterrows():
-                    symbol = row['Symbol']
-                    live_px = row['Live Price']
-                    
-                    st.markdown(f"""
-                    <div class="scard hit">
-                        <div class="ribbon">🔥 MOMENTUM PICK</div>
-                        <div class="ch">
-                            <div class="sym">{symbol}</div>
-                            <div class="live-px">₹{live_px}</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Render live candlestick chart with fallback
-                    try:
-                        ticker_data = yf.Ticker(f"{symbol}.NS")
-                        hist_6m = ticker_data.history(period="6m")
-                        
-                        if not hist_6m.empty:
-                            hist_6m['21EMA'] = hist_6m['Close'].ewm(span=21, adjust=False).mean()
-                            
-                            fig = go.Figure(data=[
-                                go.Candlestick(
-                                    x=hist_6m.index,
-                                    open=hist_6m['Open'],
-                                    high=hist_6m['High'],
-                                    low=hist_6m['Low'],
-                                    close=hist_6m['Close'],
-                                    name="Candles"
-                                ),
-                                go.Scatter(
-                                    x=hist_6m.index, 
-                                    y=hist_6m['21EMA'], 
-                                    mode='lines', 
-                                    line=dict(color='#fb923c', width=1.5), 
-                                    name="21 EMA"
-                                )
-                            ])
-                            
-                            fig.update_layout(
-                                xaxis_rangeslider_visible=False,
-                                paper_bgcolor='rgba(0,0,0,0)',
-                                plot_bgcolor='rgba(0,0,0,0)',
-                                font=dict(color='#a8b4cc'),
-                                xaxis=dict(gridcolor='#1e2740'),
-                                yaxis=dict(gridcolor='#1e2740'),
-                                height=400,
-                                margin=dict(l=10, r=10, t=20, b=20)
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.warning(f"No 6-month data available for {symbol}")
-                    except Exception as e:
-                        logger.error(f"Chart rendering failed for {symbol}: {e}")
-                        st.warning(f"⚠️ Unable to load chart for {symbol}: {str(e)}")
-
-    # --- TAB 5: SECTOR HEATMAP (CONSOLIDATED) ---
-    with tab_heatmap:
-        st.markdown("<div class='slbl'>🗺️ Sector Heatmap Distribution</div>", unsafe_allow_html=True)
-        
-        if st.session_state['scanned_df'].empty:
-            st.info("Database empty. You must process stocks on Tab 1 first.")
-        else:
-            df_full = st.session_state['scanned_df'].copy()
-            
-            # Build and render treemap safely
-            treemap_data = safe_build_treemap_data(df_full)
-            fig, error_msg = render_treemap(treemap_data, "Scanned Portfolio Mapped by Sector (Box size = Price)")
-            
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
-            elif error_msg:
-                st.error(f"📊 {error_msg}")
-            
-            st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
-            try:
-                st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
-            except Exception as e:
-                logger.error(f"DataFrame display failed: {e}")
-                st.dataframe(df_full, use_container_width=True)
-
 
 if __name__ == "__main__":
     main()
