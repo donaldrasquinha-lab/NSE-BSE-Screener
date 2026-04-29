@@ -134,7 +134,7 @@ def main():
 
     with tab_screener:
         token_input = st.text_input("Enter Upstox Access Token (v2)", type="password")
-    if token_input:
+        if token_input:
         if check_upstox_token(token_input): st.success("Upstox Status: Connected!")
         else: st.error("Upstox Status: Invalid Token.")
             
@@ -143,12 +143,12 @@ def main():
 
         unique_assets = BSE_500_TICKERS.split(",") if "BSE" in target_index else (NIFTY_500_TICKERS.split(",") if "500" in target_index else NIFTY_50_TICKERS.split(","))
         
-    selected_batch_idx_raw = st.selectbox("Select Asset Cluster to Process",range(num_batches),index=st.session_state['active_batch_idx'], 
+        selected_batch_idx_raw = st.selectbox("Select Asset Cluster to Process",range(num_batches),index=st.session_state['active_batch_idx'], 
         format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}")
         
     # 🟢 THE CRITICAL FIX: Forces fallback to 0 if Streamlit returns None [1]
         selected_batch_idx = selected_batch_idx_raw if selected_batch_idx_raw is not None else 0
-           st.session_state['active_batch_idx'] = selected_batch_idx
+        st.session_state['active_batch_idx'] = selected_batch_idx
         
         # Execution pointers
         loop_start = selected_batch_idx * batch_size
