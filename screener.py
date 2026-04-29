@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Upstox API v2 Auth + Persistent File Downloader
-Tab 2: Master Grid with Bar Graph and Local Data Retrieval
-Tab 3: Grouped Momentum Scanner Powered by Persistent Memory
+Tab 1: Downloads the massive live complete.csv.gz from Upstox CDN
+Tab 2: Manual upload point to load catalog into memory
+Tab 3: Momentum Strategy Hub with grouped results
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
 """
 
-import io, gzip, os
+import io, gzip
 import requests
 import numpy  as np
 import pandas as pd
@@ -18,13 +18,12 @@ import yfinance as yf
 import plotly.graph_objects as go
 
 # ===========================================================================
-#  CONFIG & PERSISTENT MEMORY PATHS
+#  CONFIG & FALLBACK SECTOR MAP
 # ===========================================================================
-UPSTOX_BASE  = "https://api.upstox.com/v2"
+UPSTOX_BASE  = "https://upstox.com"
 UPSTOX_CDN_CSV = "https://upstox.com"
-LOCAL_MEMORY_PATH = "instruments_master.csv"  # Permanent memory file
 
-# Hardcoded index asset mappings preserved as requested
+# Hardcoded index asset mappings preserved for manual pool overrides
 INDICES_MAP = {
     "Nifty 50": "RELIANCE,TCS,HDFCBANK,ICICIBANK,INFY,BHARTIARTL,HINDUNILVR,ITC,SBI,LTIM,ADANIENT,ADANIPORTS,ASIANPAINT,AXISBANK,BAJAJ-AUTO,BAJFINANCE,BAJAJFINSV,BPCL,BRITANNIA,CIPLA,COALINDIA,DIVISLAB,DRREDDY,EICHERMOT,GRASIM,HCLTECH,HEROMOTOCO,HINDALCO,INDUSINDBK,JSWSTEEL,KOTAKBANK,LT,M&M,MARUTI,NESTLEIND,NTPC,ONGC,POWERGRID,SBILIFE,SUNPHARMA,TATACONSUM,TATAMOTORS,TATASTEEL,TECHM,TITAN,ULTRACEMCO,UPL,WIPRO,SHRIRAMFIN",
     "Bank Nifty": "HDFCBANK,ICICIBANK,SBI,AXISBANK,KOTAKBANK,INDUSINDBK,PNB,FEDERALBNK,BANKBARODA,IDFCFIRSTB,AUBANK,CANBK",
@@ -86,7 +85,6 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 .hdr .sub{font-family:var(--mono);font-size:.6rem;color:var(--t3);margin-top:5px;letter-spacing:.8px;}
 .slbl{font-family:var(--mono);font-size:.58rem;letter-spacing:2px;text-transform:uppercase;
   color:var(--sky);border-left:2px solid var(--sky);padding-left:8px;margin:14px 0 9px;}
-.kpis{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
 
 .scard{background:var(--card);border:1px solid var(--border);border-radius:10px;
   padding:14px 16px;margin-bottom:8px;position:relative;}
@@ -117,40 +115,25 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 #  LOGIC HANDLERS
 # ===========================================================================
 
-def check_upstox_token(token: str) -> bool:
-    """Verifies Upstox Token validity using the official API v2 profile endpoint."""
-    clean_token = token.strip() if token else ""
-    if not clean_token:
-        return False
-        
-    url = f"{UPSTOX_BASE}/user/profile"
-    headers = {'Accept': 'application/json', 'Authorization': f'Bearer {clean_token}'}
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        return response.status_code == 200
-    except Exception:
-        return False
-
-def download_and_store_catalog():
-    """Pulls full catalog and stores it permanently in local memory."""
+def fetch_and_prepare_csv():
+    """Pulls full catalog from Upstox and converts it directly into a clean CSV string for local download."""
     try:
         response = requests.get(UPSTOX_CDN_CSV, stream=True, timeout=15)
         if response.status_code == 200:
             with gzip.open(io.BytesIO(response.content), 'rt') as f:
                 df = pd.read_csv(f)
             
-            # Filter solely for cash equities
+            # Filter strictly for standard NSE/BSE Equity shares
             df_filtered = df[(df['exchange'].isin(['NSE', 'BSE'])) & (df['instrument_type'] == 'EQUITY')]
             df_final = df_filtered[['tradingsymbol', 'exchange', 'name']].copy()
             df_final.rename(columns={'tradingsymbol': 'Symbol', 'exchange': 'Exchange', 'name': 'Company Name'}, inplace=True)
             df_final['Sector'] = df_final['Symbol'].apply(lambda x: SECTOR_MAP.get(x, "Other / Diversified"))
             
-            # Write directly to local disk (Permanent Memory)
-            df_final.to_csv(LOCAL_MEMORY_PATH, index=False)
-            return True, len(df_final)
+            # Encode directly to string stream
+            return df_final.to_csv(index=False).encode('utf-8')
     except Exception as e:
-        return False, str(e)
-    return False, "Unknown Error"
+        st.error(f"Failed to fetch Upstox catalog. Error: {e}")
+        return None
 
 def analyze_momentum_setup(symbol: str, exchange: str = "NSE") -> dict:
     """Calculates price technicals and pulls rough fundamentals safely using yfinance."""
@@ -193,63 +176,66 @@ def analyze_momentum_setup(symbol: str, exchange: str = "NSE") -> dict:
 def main():
     if 'scanned_df' not in st.session_state:
         st.session_state['scanned_df'] = pd.DataFrame()
+    if 'uploaded_instruments' not in st.session_state:
+        st.session_state['uploaded_instruments'] = pd.DataFrame()
 
     st.markdown("""
     <div class='hdr'>
         <h1>NSE + BSE Multibagger Screener</h1>
-        <div class='sub'>V6.0 • HARDCODED + PERMANENT MEMORY ENGINE</div>
+        <div class='sub'>V6.0 • REAL-TIME DATA PROCESSING ENGINE</div>
     </div>
     """, unsafe_allow_html=True)
 
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
-    # --- TAB 1: SCREENER (Now handles permanent memory storage) ---
+    # --- TAB 1: SCREENER (Now features local file physical download) ---
     with tab_screener:
-        st.markdown("<div class='slbl'>Upstox Data Pull Hub (API v2 Ready)</div>", unsafe_allow_html=True)
-        if 'upstox_token' not in st.session_state:
-            st.session_state['upstox_token'] = ""
-            
-        token_input = st.text_input("Enter Upstox Access Token", value=st.session_state['upstox_token'], type="password")
+        st.markdown("<div class='slbl'>Upstox Manual Data Extraction</div>", unsafe_allow_html=True)
+        st.caption("Pulls real-time physical CSV registries from the Upstox network and prepares it for local storage.")
         
-        if token_input:
-            st.session_state['upstox_token'] = token_input
-            if check_upstox_token(token_input):
-                st.success("Upstox Status: Connected successfully!")
-            else:
-                st.error("Upstox Status: Disconnected. Invalid token.")
-        else:
-            st.warning("Upstox Status: Disconnected. Waiting for token input.")
-            
-        st.markdown("<div class='slbl'>Permanent Storage Setup</div>", unsafe_allow_html=True)
-        st.caption("Pulls the physical registry from Upstox and builds a local file storage so you don't have to download it on every boot.")
+        csv_payload = fetch_and_prepare_csv()
         
-        if st.button("📥 Download & Save Full Master Catalog"):
-            with st.spinner("Writing master assets to permanent storage..."):
-                success, count_or_err = download_and_store_catalog()
-                if success:
-                    st.success(f"File locked into local storage! {count_or_err} active equities identified.")
-                else:
-                    st.error(f"Write failed: {count_or_err}")
+        if csv_payload:
+            st.download_button(
+                label="📥 Download Upstox Equities to Desktop",
+                data=csv_payload,
+                file_name="upstox_instruments.csv",
+                mime="text/csv"
+            )
+            st.success("CSV compiled successfully! Click the button to save it locally.")
+            st.info("Once downloaded, head over to Tab 2 to upload this identical file into your scanner profile.")
 
-    # --- TAB 2: DATABASE ---
+    # --- TAB 2: DATABASE (Now features the drag-and-drop uploader) ---
     with tab_db:
-        st.markdown("<div class='slbl'>Local Storage Inventory</div>", unsafe_allow_html=True)
-        db_source = st.radio("Select Database Layer to View", ["Scanned Active List", "Permanent Memory Catalog"])
+        st.markdown("<div class='slbl'>Database Execution Gateway</div>", unsafe_allow_html=True)
+        st.caption("Drag and drop the 'upstox_instruments.csv' file that you downloaded from Tab 1.")
         
-        if db_source == "Scanned Active List":
+        uploaded_file = st.file_uploader("Upload Upstox CSV File", type=["csv"])
+        
+        if uploaded_file is not None:
+            try:
+                # Read the file the user just loaded up
+                st.session_state['uploaded_instruments'] = pd.read_csv(uploaded_file)
+                st.success("File ingested successfully! Full inventory mapped to memory.")
+            except Exception as e:
+                st.error(f"Failed to read standard structure file. Trace: {e}")
+                
+        # Sub-layer separation
+        db_source = st.radio("Select Active Data Ledger", ["Real-Time Scanned Results", "Uploaded Master Registry"])
+        
+        if db_source == "Real-Time Scanned Results":
             if st.session_state['scanned_df'].empty:
-                st.info("No live scan data. Run a 'Momentum Scan' on Tab 3 to populate.")
+                st.info("No live scan data available. Run a 'Momentum Scan' on Tab 3 to populate this grid.")
             else:
                 st.dataframe(st.session_state['scanned_df'].reset_index(drop=True), use_container_width=True)
                 
         else:
-            # Load straight from file storage
-            if not os.path.exists(LOCAL_MEMORY_PATH):
-                st.info("No permanent file recorded yet. Navigate back to Tab 1 and build it.")
+            if st.session_state['uploaded_instruments'].empty:
+                st.info("No master instruments loaded yet. Upload the CSV file extracted from Tab 1 above.")
             else:
-                df_master = pd.read_csv(LOCAL_MEMORY_PATH)
-                st.markdown(f"**Storage Capacity Found:** {len(df_master)} cached asset strings.")
+                df_master = st.session_state['uploaded_instruments']
                 
+                # Dynamic Plotly Bar Graph
                 sector_counts = df_master['Sector'].value_counts().reset_index()
                 sector_counts.columns = ['Sector', 'Count']
                 fig = go.Figure(data=[go.Bar(
@@ -257,64 +243,67 @@ def main():
                     marker_color='#38bdf8', text=sector_counts['Count'], textposition='auto',
                 )])
                 fig.update_layout(
-                    title="<b>Persistent File Distribution</b>", title_font=dict(color="#f0f4ff"),
+                    title="<b>Database Distribution by Sector</b>", title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
                     paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='#a8b4cc'), xaxis=dict(gridcolor='#1e2740'), yaxis=dict(gridcolor='#1e2740'),
-                    height=260, margin=dict(l=10, r=10, t=50, b=10)
+                    font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
+                    xaxis=dict(gridcolor='#1e2740'), yaxis=dict(gridcolor='#1e2740'),
+                    height=300, margin=dict(l=10, r=10, t=50, b=10)
                 )
                 st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("<div class='slbl'>Extracted Master Stock List (Sorted by Sector)</div>", unsafe_allow_html=True)
                 st.dataframe(df_master.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
     # --- TAB 3: MOMENTUM STRATEGY HUB ---
     with tab_momentum:
         st.markdown("<div class='slbl'>Momentum Strategy Hub</div>", unsafe_allow_html=True)
+        st.caption("Auto-checks candidates against defined EPS, RS Resilience, and price magnets around the 21EMA.")
         
-        # Pulls labels from the Preserved Hardcoded groups
+        # Pulls labels from the hardcoded groups
         options_list = list(INDICES_MAP.keys())
-        # Checks if file memory exists to add as a queryable pool
-        if os.path.exists(LOCAL_MEMORY_PATH):
-            options_list.append("Full Permanent Memory List")
-            
-        selected_index = st.selectbox("Select Target Index / Memory Pool to Scan", options_list)
         
-        # Load the asset strings dynamically into the pool
-        if selected_index == "Full Permanent Memory List":
-            df_full_mem = pd.read_csv(LOCAL_MEMORY_PATH)
-            # Limit the prompt due to text box constraints but parse all on run
-            loaded_tickers = ",".join(df_full_mem['Symbol'].head(500).tolist())
+        # Check if they have uploaded a custom file to add that to the options!
+        if not st.session_state['uploaded_instruments'].empty:
+            options_list.insert(0, "Full Uploaded CSV Pool")
+            
+        selected_index = st.selectbox("Select Target Pool to Scan", options_list)
+        
+        # Auto-fill the scratchpad box
+        if selected_index == "Full Uploaded CSV Pool":
+            df_full_pool = st.session_state['uploaded_instruments']
+            # Limit pool scratchpad visual to avoid browser hanging
+            loaded_tickers = ",".join(df_full_pool['Symbol'].head(300).tolist())
         else:
             loaded_tickers = INDICES_MAP[selected_index]
             
-        m_tickers = st.text_area("Asset Pool Mapping (Editable):", loaded_tickers, height=120)
+        m_tickers = st.text_area("Pool Mapping (Editable):", loaded_tickers, height=100)
         
-        default_exch = "BSE" if selected_index == "Sensex" else "NSE"
         col1, col2 = st.columns(2)
         with col1:
-            m_exch = st.selectbox("Source Route", ["NSE", "BSE"], index=0 if default_exch == "NSE" else 1)
+            m_exch = st.selectbox("Source Route", ["NSE", "BSE"])
         with col2:
             st.markdown("<br>", unsafe_allow_html=True)
             scan_clicked = st.button("🔥 Run Momentum Scan")
 
         if scan_clicked:
-            # Fallback to read from file directly if full memory is picked to bypass string box limits
-            if selected_index == "Full Permanent Memory List":
-                tickers_list = pd.read_csv(LOCAL_MEMORY_PATH)['Symbol'].tolist()
+            # Bypass string limits if full CSV pool was requested
+            if selected_index == "Full Uploaded CSV Pool":
+                tickers_list = st.session_state['uploaded_instruments']['Symbol'].tolist()
             else:
                 tickers_list = [x.strip().upper() for x in m_tickers.replace('\n', ',').split(",") if x.strip()]
             
             if not tickers_list:
-                st.error("No valid payload.")
+                st.error("No valid ticker payload found.")
                 return
                 
-            st.write(f"Sifting through {len(tickers_list)} asset tapes...")
-            
             prog_bar = st.progress(0.0)
             status_text = st.empty()
             momentum_results = []
+            
             tab2_symbols, tab2_prices, tab2_zones, tab2_res = [], [], [], []
             
             for idx, ticker in enumerate(tickers_list):
-                status_text.text(f"Scanning tape: {ticker}...")
+                status_text.text(f"Fetching structural tape: {ticker}...")
                 m_data = analyze_momentum_setup(ticker, m_exch)
                 momentum_results.append(m_data)
                 
@@ -326,15 +315,15 @@ def main():
                 
                 prog_bar.progress((idx + 1) / len(tickers_list))
                 
-            status_text.success("Protocol execution finished!")
+            status_text.success("Scan network execution finished!")
             
             st.session_state['scanned_df'] = pd.DataFrame({
                 "Symbol": tab2_symbols, "Price": tab2_prices,
                 "21MA BUY ZONE": tab2_zones, "RS RESILIENT": tab2_res
             })
             
-            perfect_hits = []
-            other_results = []
+            # Flex Cluster Sorting
+            perfect_hits, other_results = [], []
             for r in momentum_results:
                 if r["live_px"] == 0.0: continue
                 if r["rs_resilient"] and r["buy_zone"]:
@@ -342,17 +331,14 @@ def main():
                 else:
                     other_results.append(r)
             
-            # Visual Clustered Outputs
+            # Draw Group 1
             st.markdown("<div class='group-header'>🔥 Group 1: Perfect Momentum Picks</div>", unsafe_allow_html=True)
             if perfect_hits:
                 for r in perfect_hits:
                     st.markdown(f"""
                     <div class="scard hit">
                         <div class="ribbon">🔥 MOMENTUM PICK</div>
-                        <div class="ch">
-                            <div class="sym">{r['symbol']}</div>
-                            <div class="live-px">₹{r['live_px']}</div>
-                        </div>
+                        <div class="ch"><div class="sym">{r['symbol']}</div><div class="live-px">₹{r['live_px']}</div></div>
                         <div class="mgrid">
                             <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['eps_accel']}</div></div>
                             <div class="met"><div class="ml">SURPRISE</div><div class="mv">{r['surprise']}</div></div>
@@ -362,16 +348,14 @@ def main():
                     </div>
                     """, unsafe_allow_html=True)
             else:
-                st.info("No candidates locked all parameters.")
+                st.info("No assets met all 100% of the calculated momentum parameters.")
             
-            st.markdown("<div class='group-header'>📊 Group 2: Monitored Asset Pool</div>", unsafe_allow_html=True)
+            # Draw Group 2
+            st.markdown("<div class='group-header'>📊 Group 2: Other Scanned Assets</div>", unsafe_allow_html=True)
             for r in other_results:
                 st.markdown(f"""
                 <div class="scard">
-                    <div class="ch">
-                        <div class="sym">{r['symbol']}</div>
-                        <div class="live-px">₹{r['live_px']}</div>
-                    </div>
+                    <div class="ch"><div class="sym">{r['symbol']}</div><div class="live-px">₹{r['live_px']}</div></div>
                     <div class="mgrid">
                         <div class="met"><div class="ml">EPS ACCEL</div><div class="mv">{r['eps_accel']}</div></div>
                         <div class="met"><div class="ml">SURPRISE</div><div class="mv">{r['surprise']}</div></div>
