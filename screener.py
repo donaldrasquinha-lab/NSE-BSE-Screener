@@ -340,7 +340,50 @@ def main():
                     st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
                     st.rerun()
 
-            df_full = st.session_state['scanned_df']
+                       # 1. Clean prices for sizing
+            df_full['Clean_Price'] = pd.to_numeric(df_full['Live Price'].astype(str).str.replace('₹', '').str.replace(',', ''), errors='coerce').fillna(1.0)
+            
+            # 2. Build hard structures for the tree (This fixes the invisible plot)
+            sectors = df_full['Sector'].unique().tolist()
+            symbols = df_full['Symbol'].tolist()
+            
+            # Labels: Sectors act as parents, Symbols act as children
+            labels = sectors + symbols
+            
+            # Parents: Sectors have no parent (empty string), Symbols belong to their Sector
+            parents = ["" for _ in sectors] + df_full['Sector'].tolist()
+            
+            # Values: Sectors get the sum of their symbols' prices, Symbols get their own price
+            sector_sums = df_full.groupby('Sector')['Clean_Price'].sum().to_dict()
+            values = [sector_sums[sec] for sec in sectors] + df_full['Clean_Price'].tolist()
+            
+            # 3. Create the fixed treemap
+            fig_hm = go.Figure(go.Treemap(
+                labels=labels,
+                parents=parents,
+                values=values,
+                textinfo="label+value",
+                marker=dict(
+                    colorscale='Electric',
+                    showscale=True
+                )
+            ))
+            
+            fig_hm.update_layout(
+                title="<b>Scanned Portfolio Mapped by Sector (Box size = Price)</b>",
+                title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
+                height=600,
+                margin=dict(l=10, r=10, t=50, b=10)
+            )
+            
+            st.plotly_chart(fig_hm, use_container_width=True)
+            
+            st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
+            st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
+
             st.dataframe(df_full.sort_values(by='Symbol').reset_index(drop=True), use_container_width=True)
 
     # --- TAB 3: MOMENTUM STRATEGY HUB ---
