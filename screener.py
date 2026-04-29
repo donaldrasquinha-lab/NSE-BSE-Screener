@@ -1,78 +1,51 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Upstox Token + Mass Index Download (Resolved v2 Auth)
-Tab 2: Master Instrument Grid Sorted by Sector + Graph
-Tab 3: Momentum Strategy Hub with Grouped Layouts
+Tab 1: Upstox API v2 Auth + Persistent File Downloader
+Tab 2: Master Grid with Bar Graph and Local Data Retrieval
+Tab 3: Grouped Momentum Scanner Powered by Persistent Memory
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
 """
 
-import io, csv, gzip, json, math, time, datetime, sqlite3, threading, traceback
-from pathlib import Path
-from typing   import Optional
-
+import io, gzip, os
 import requests
 import numpy  as np
 import pandas as pd
 import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 # ===========================================================================
-#  CONFIG & HARDCODED INDICES & SECTOR MAP
+#  CONFIG & PERSISTENT MEMORY PATHS
 # ===========================================================================
 UPSTOX_BASE  = "https://api.upstox.com/v2"
+UPSTOX_CDN_CSV = "https://upstox.com"
+LOCAL_MEMORY_PATH = "instruments_master.csv"  # Permanent memory file
 
-# Hardcoded index asset mappings for standard and momentum scanning
+# Hardcoded index asset mappings preserved as requested
 INDICES_MAP = {
     "Nifty 50": "RELIANCE,TCS,HDFCBANK,ICICIBANK,INFY,BHARTIARTL,HINDUNILVR,ITC,SBI,LTIM,ADANIENT,ADANIPORTS,ASIANPAINT,AXISBANK,BAJAJ-AUTO,BAJFINANCE,BAJAJFINSV,BPCL,BRITANNIA,CIPLA,COALINDIA,DIVISLAB,DRREDDY,EICHERMOT,GRASIM,HCLTECH,HEROMOTOCO,HINDALCO,INDUSINDBK,JSWSTEEL,KOTAKBANK,LT,M&M,MARUTI,NESTLEIND,NTPC,ONGC,POWERGRID,SBILIFE,SUNPHARMA,TATACONSUM,TATAMOTORS,TATASTEEL,TECHM,TITAN,ULTRACEMCO,UPL,WIPRO,SHRIRAMFIN",
-    
     "Bank Nifty": "HDFCBANK,ICICIBANK,SBI,AXISBANK,KOTAKBANK,INDUSINDBK,PNB,FEDERALBNK,BANKBARODA,IDFCFIRSTB,AUBANK,CANBK",
-    
     "Fin Nifty": "HDFCBANK,ICICIBANK,AXISBANK,KOTAKBANK,SBI,BAJFINANCE,BAJAJFINSV,CHOLAFIN,HDFCLIFE,SBILIFE,RECLTD,PFC,SHRIRAMFIN,MUTHOOTFIN,ICICIGI,ICICIPRULI,SBICARD,HDFCAMC,LICHSGFIN",
-    
     "Sensex": "RELIANCE,HDFCBANK,TCS,ICICIBANK,INFY,ITC,BHARTIARTL,HINDUNILVR,SBI,LT,AXISBANK,KOTAKBANK,M&M,HCLTECH,BAJFINANCE,SUNPHARMA,MARUTI,TATAMOTORS,NTPC,ASIANPAINT,TITAN,ULTRACEMCO,POWERGRID,BAJAJFINSV,JSWSTEEL,TATASTEEL,TECHM,BAJAJ-AUTO,INDUSINDBK,NESTLEIND"
 }
 
-# Fallback mapping to populate Tab 2 cleanly
+# Fallback mapping to populate Tab 2 cleanly for top index assets
 SECTOR_MAP = {
-    # Financials
     "HDFCBANK": "Financial Services", "ICICIBANK": "Financial Services", "SBI": "Financial Services", 
     "AXISBANK": "Financial Services", "KOTAKBANK": "Financial Services", "BAJFINANCE": "Financial Services",
-    "BAJAJFINSV": "Financial Services", "INDUSINDBK": "Financial Services", "SBILIFE": "Financial Services",
-    "SHRIRAMFIN": "Financial Services", "PNB": "Financial Services", "FEDERALBNK": "Financial Services",
-    "BANKBARODA": "Financial Services", "IDFCFIRSTB": "Financial Services", "AUBANK": "Financial Services",
-    "CHOLAFIN": "Financial Services", "HDFCLIFE": "Financial Services", "RECLTD": "Financial Services",
-    "PFC": "Financial Services", "MUTHOOTFIN": "Financial Services", "LICHSGFIN": "Financial Services",
-    "SBICARD": "Financial Services", "HDFCAMC": "Financial Services", "ICICIGI": "Financial Services", "ICICIPRULI": "Financial Services",
-    # IT
-    "TCS": "IT", "INFY": "IT", "HCLTECH": "IT", "TECHM": "IT", "WIPRO": "IT", "LTIM": "IT",
-    # Energy / Oil & Gas
-    "RELIANCE": "Energy / Oil & Gas", "ONGC": "Energy / Oil & Gas", "BPCL": "Energy / Oil & Gas", 
-    "NTPC": "Power", "POWERGRID": "Power",
-    # FMCG
-    "HINDUNILVR": "FMCG", "ITC": "FMCG", "NESTLEIND": "FMCG", "BRITANNIA": "FMCG", "TATACONSUM": "FMCG",
-    # Auto
-    "TATAMOTORS": "Automobile", "M&M": "Automobile", "MARUTI": "Automobile", "BAJAJ-AUTO": "Automobile",
-    "EICHERMOT": "Automobile", "HEROMOTOCO": "Automobile",
-    # Pharma
-    "SUNPHARMA": "Pharma / Healthcare", "CIPLA": "Pharma / Healthcare", "DRREDDY": "Pharma / Healthcare",
-    "DIVISLAB": "Pharma / Healthcare", "APOLLOHOSP": "Pharma / Healthcare",
-    # Metals & Mining
-    "TATASTEEL": "Metals & Mining", "JSWSTEEL": "Metals & Mining", "HINDALCO": "Metals & Mining",
-    "COALINDIA": "Metals & Mining", "ADANIENT": "Conglomerates",
-    # Construction / Infrastructure
-    "LT": "Infrastructure", "ADANIPORTS": "Infrastructure",
-    # Consumer Durables / Others
-    "TITAN": "Consumer Durables", "ASIANPAINT": "Paints", "ULTRACEMCO": "Cement", "GRASIM": "Cement", "UPL": "Chemicals"
+    "BAJAJFINSV": "Financial Services", "TCS": "IT", "INFY": "IT", "HCLTECH": "IT", "TECHM": "IT", "WIPRO": "IT", 
+    "RELIANCE": "Energy / Oil & Gas", "HINDUNILVR": "FMCG", "ITC": "FMCG", "TATAMOTORS": "Automobile", 
+    "M&M": "Automobile", "SUNPHARMA": "Pharma / Healthcare", "TITAN": "Consumer Durables"
 }
 
 # ===========================================================================
 #  PAGE SETUP & CSS STYLING
 # ===========================================================================
+st.set_page_config(page_title="NSE+BSE Screener", page_icon="🚀", layout="wide", initial_sidebar_state="expanded")
+
 st.markdown("""
 <style>
 @import url('https://googleapis.com');
@@ -114,13 +87,7 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 .slbl{font-family:var(--mono);font-size:.58rem;letter-spacing:2px;text-transform:uppercase;
   color:var(--sky);border-left:2px solid var(--sky);padding-left:8px;margin:14px 0 9px;}
 .kpis{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
-.kpi{flex:1;min-width:90px;background:var(--card);border:1px solid var(--border);
-  border-radius:10px;padding:12px 14px;text-align:center;}
-.kpi .v{font-family:var(--mono);font-weight:700;font-size:1.6rem;line-height:1;}
-.kpi .l{font-size:.56rem;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-top:4px;}
-.csky{color:var(--sky);}.csage{color:var(--sage);}.camb{color:var(--amber);}
 
-/* Cards & Banner Layouts */
 .scard{background:var(--card);border:1px solid var(--border);border-radius:10px;
   padding:14px 16px;margin-bottom:8px;position:relative;}
 .scard.hit{background:linear-gradient(160deg,#0f1d14,var(--card));border-color:rgba(52,211,153,.3);}
@@ -132,7 +99,6 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 .met .ml{font-size:.55rem;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;}
 .met .mv{font-size:.84rem;font-weight:600;color:var(--t1);font-family:var(--mono);margin-top:2px;}
 
-/* Glow Banner */
 .ribbon{
   position:absolute;top:10px;right:10px;
   background:linear-gradient(90deg, #10b981, #059669);
@@ -140,8 +106,6 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
   padding:3px 8px;border-radius:4px;letter-spacing:1px;
   box-shadow:0 0 10px rgba(16,185,129,0.3);
 }
-
-/* Flex Grouping */
 .group-header {
   font-family: var(--sans); font-size: 1.1rem; font-weight: 700; color: #fff;
   margin: 15px 0 10px 0; border-bottom: 1px solid var(--border); padding-bottom: 5px;
@@ -160,27 +124,42 @@ def check_upstox_token(token: str) -> bool:
         return False
         
     url = f"{UPSTOX_BASE}/user/profile"
-    headers = {
-        'Accept': 'application/json',
-        'Authorization': f'Bearer {clean_token}'
-    }
+    headers = {'Accept': 'application/json', 'Authorization': f'Bearer {clean_token}'}
     try:
         response = requests.get(url, headers=headers, timeout=5)
         return response.status_code == 200
     except Exception:
         return False
 
+def download_and_store_catalog():
+    """Pulls full catalog and stores it permanently in local memory."""
+    try:
+        response = requests.get(UPSTOX_CDN_CSV, stream=True, timeout=15)
+        if response.status_code == 200:
+            with gzip.open(io.BytesIO(response.content), 'rt') as f:
+                df = pd.read_csv(f)
+            
+            # Filter solely for cash equities
+            df_filtered = df[(df['exchange'].isin(['NSE', 'BSE'])) & (df['instrument_type'] == 'EQUITY')]
+            df_final = df_filtered[['tradingsymbol', 'exchange', 'name']].copy()
+            df_final.rename(columns={'tradingsymbol': 'Symbol', 'exchange': 'Exchange', 'name': 'Company Name'}, inplace=True)
+            df_final['Sector'] = df_final['Symbol'].apply(lambda x: SECTOR_MAP.get(x, "Other / Diversified"))
+            
+            # Write directly to local disk (Permanent Memory)
+            df_final.to_csv(LOCAL_MEMORY_PATH, index=False)
+            return True, len(df_final)
+    except Exception as e:
+        return False, str(e)
+    return False, "Unknown Error"
+
 def analyze_momentum_setup(symbol: str, exchange: str = "NSE") -> dict:
     """Calculates price technicals and pulls rough fundamentals safely using yfinance."""
     yf_symbol = f"{symbol}.NS" if exchange == "NSE" else f"{symbol}.BO"
-    sector_str = SECTOR_MAP.get(symbol, "Other / Diversified")
-    
     res = {
         "symbol": symbol, "live_px": 0.0, "ema_21": 0.0, 
         "eps_accel": "No Data", "surprise": "No Data", 
-        "rs_resilient": False, "buy_zone": False, "sector": sector_str
+        "rs_resilient": False, "buy_zone": False
     }
-    
     try:
         stock = yf.Ticker(yf_symbol)
         hist = stock.history(period="1y")
@@ -190,26 +169,21 @@ def analyze_momentum_setup(symbol: str, exchange: str = "NSE") -> dict:
         close_px = hist['Close'].iloc[-1]
         res["live_px"] = round(close_px, 2)
         
-        # 21 EMA & Buy Zone (within 2.5% boundary)
         hist['21EMA'] = hist['Close'].ewm(span=21, adjust=False).mean()
         ema_21 = hist['21EMA'].iloc[-1]
         res["ema_21"] = round(ema_21, 2)
         res["buy_zone"] = close_px > ema_21 and close_px < (ema_21 * 1.025)
         
-        # RS Resilience
         wh_52 = hist['Close'].max()
         res["rs_resilient"] = (close_px / wh_52) >= 0.85
         
-        # Fundamental Fallback
         info = stock.info
         if "forwardEps" in info and "trailingEps" in info:
             if info["forwardEps"] is not None and info["trailingEps"] is not None:
                 res["eps_accel"] = "✅ Yes" if info["forwardEps"] > info["trailingEps"] else "❌ No"
                 res["surprise"] = "Checked"
-            
     except Exception:
         pass
-        
     return res
 
 # ===========================================================================
@@ -217,120 +191,97 @@ def analyze_momentum_setup(symbol: str, exchange: str = "NSE") -> dict:
 # ===========================================================================
 
 def main():
-    # Initialize shared states
     if 'scanned_df' not in st.session_state:
         st.session_state['scanned_df'] = pd.DataFrame()
-    if 'master_instruments' not in st.session_state:
-        st.session_state['master_instruments'] = pd.DataFrame()
+
+    st.markdown("""
+    <div class='hdr'>
+        <h1>NSE + BSE Multibagger Screener</h1>
+        <div class='sub'>V6.0 • HARDCODED + PERMANENT MEMORY ENGINE</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
-    # --- TAB 1: SCREENER (Now features mass download) ---
+    # --- TAB 1: SCREENER (Now handles permanent memory storage) ---
     with tab_screener:
-        st.markdown("<div class='slbl'>Upstox API Authentication</div>", unsafe_allow_html=True)
+        st.markdown("<div class='slbl'>Upstox Data Pull Hub (API v2 Ready)</div>", unsafe_allow_html=True)
         if 'upstox_token' not in st.session_state:
             st.session_state['upstox_token'] = ""
             
-        token_input = st.text_input("Enter Upstox Access Token (v2)", value=st.session_state['upstox_token'], type="password")
+        token_input = st.text_input("Enter Upstox Access Token", value=st.session_state['upstox_token'], type="password")
         
         if token_input:
             st.session_state['upstox_token'] = token_input
-            is_valid = check_upstox_token(token_input)
-            if is_valid:
+            if check_upstox_token(token_input):
                 st.success("Upstox Status: Connected successfully!")
             else:
                 st.error("Upstox Status: Disconnected. Invalid token.")
         else:
             st.warning("Upstox Status: Disconnected. Waiting for token input.")
             
-        st.markdown("<div class='slbl'>Market Scanner Control</div>", unsafe_allow_html=True)
+        st.markdown("<div class='slbl'>Permanent Storage Setup</div>", unsafe_allow_html=True)
+        st.caption("Pulls the physical registry from Upstox and builds a local file storage so you don't have to download it on every boot.")
         
-        # Massive download trigger
-        if st.button("📥 Download & Map All Index Instruments"):
-            # Aggregate all unique symbols from hardcoded indices
-            all_assets = []
-            for k, v in INDICES_MAP.items():
-                all_assets.extend(v.split(","))
-            unique_assets = list(set(all_assets))
-            
-            p_bar = st.progress(0.0)
-            s_text = st.empty()
-            processed_data = []
-            
-            for idx, symbol in enumerate(unique_assets):
-                s_text.text(f"Indexing master profile for: {symbol}")
-                # Assign sector or fallback
-                sector_str = SECTOR_MAP.get(symbol, "Other / Diversified")
-                processed_data.append({
-                    "Symbol": symbol,
-                    "Sector": sector_str
-                })
-                p_bar.progress((idx + 1) / len(unique_assets))
-                
-            s_text.success(f"Instrument cache built! {len(unique_assets)} assets loaded to Database tab.")
-            st.session_state['master_instruments'] = pd.DataFrame(processed_data)
+        if st.button("📥 Download & Save Full Master Catalog"):
+            with st.spinner("Writing master assets to permanent storage..."):
+                success, count_or_err = download_and_store_catalog()
+                if success:
+                    st.success(f"File locked into local storage! {count_or_err} active equities identified.")
+                else:
+                    st.error(f"Write failed: {count_or_err}")
 
     # --- TAB 2: DATABASE ---
     with tab_db:
-        st.markdown("<div class='slbl'>Database & Master Asset Hub</div>", unsafe_allow_html=True)
-        
-        # Toggle between master asset list and real-time scanned list
-        db_source = st.radio("Select Database Layer to View", ["Scanned Active List", "Master Instrument Inventory"])
+        st.markdown("<div class='slbl'>Local Storage Inventory</div>", unsafe_allow_html=True)
+        db_source = st.radio("Select Database Layer to View", ["Scanned Active List", "Permanent Memory Catalog"])
         
         if db_source == "Scanned Active List":
             if st.session_state['scanned_df'].empty:
-                st.info("No live scan data available. Run a 'Momentum Scan' on Tab 3 to populate this grid.")
+                st.info("No live scan data. Run a 'Momentum Scan' on Tab 3 to populate.")
             else:
-                df_full = st.session_state['scanned_df']
-                sector_counts = df_full['Sector'].value_counts().reset_index()
-                sector_counts.columns = ['Sector', 'Count']
+                st.dataframe(st.session_state['scanned_df'].reset_index(drop=True), use_container_width=True)
                 
+        else:
+            # Load straight from file storage
+            if not os.path.exists(LOCAL_MEMORY_PATH):
+                st.info("No permanent file recorded yet. Navigate back to Tab 1 and build it.")
+            else:
+                df_master = pd.read_csv(LOCAL_MEMORY_PATH)
+                st.markdown(f"**Storage Capacity Found:** {len(df_master)} cached asset strings.")
+                
+                sector_counts = df_master['Sector'].value_counts().reset_index()
+                sector_counts.columns = ['Sector', 'Count']
                 fig = go.Figure(data=[go.Bar(
                     x=sector_counts['Sector'], y=sector_counts['Count'],
                     marker_color='#38bdf8', text=sector_counts['Count'], textposition='auto',
                 )])
                 fig.update_layout(
-                    title="<b>Active Volume by Sector</b>", title_font=dict(color="#f0f4ff", family="'DM Sans', sans-serif"),
+                    title="<b>Persistent File Distribution</b>", title_font=dict(color="#f0f4ff"),
                     paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='#a8b4cc', family="'DM Sans', sans-serif"),
-                    xaxis=dict(gridcolor='#1e2740'), yaxis=dict(gridcolor='#1e2740'),
-                    height=300, margin=dict(l=10, r=10, t=50, b=10)
+                    font=dict(color='#a8b4cc'), xaxis=dict(gridcolor='#1e2740'), yaxis=dict(gridcolor='#1e2740'),
+                    height=260, margin=dict(l=10, r=10, t=50, b=10)
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                
-                st.markdown("<div class='slbl'>Scanned Portfolio Data</div>", unsafe_allow_html=True)
-                sorted_df = df_full.sort_values(by='Sector').reset_index(drop=True)
-                st.dataframe(
-                    sorted_df.style.map(
-                        lambda v: 'color: #34d399; font-weight: bold;' if v in ['🔥 HIT', '✅ YES'] else '',
-                        subset=["21MA BUY ZONE", "RS RESILIENT"]
-                    ), use_container_width=True
-                )
-                
-        else:
-            # Viewing the full catalog downloaded on Tab 1
-            if st.session_state['master_instruments'].empty:
-                st.info("No master instruments loaded. Go to Tab 1 and click 'Download & Map All Index Instruments'.")
-            else:
-                df_master = st.session_state['master_instruments']
-                st.markdown("<div class='slbl'>Full Catalog (Sorted by Sector)</div>", unsafe_allow_html=True)
                 st.dataframe(df_master.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
-    # --- TAB 3: MOMENTUM STRATEGY HUB (Grouped layout) ---
+    # --- TAB 3: MOMENTUM STRATEGY HUB ---
     with tab_momentum:
         st.markdown("<div class='slbl'>Momentum Strategy Hub</div>", unsafe_allow_html=True)
-        st.caption("Candidates matching all criteria will be grouped inside a priority box on the top.")
         
-        indices_list = list(INDICES_MAP.keys())
-        indices_list.insert(0, "All Indices (Mass Scan)")
-        selected_index = st.selectbox("Select Target Index to Scan", indices_list)
+        # Pulls labels from the Preserved Hardcoded groups
+        options_list = list(INDICES_MAP.keys())
+        # Checks if file memory exists to add as a queryable pool
+        if os.path.exists(LOCAL_MEMORY_PATH):
+            options_list.append("Full Permanent Memory List")
+            
+        selected_index = st.selectbox("Select Target Index / Memory Pool to Scan", options_list)
         
-        if selected_index == "All Indices (Mass Scan)":
-            all_assets = []
-            for k, v in INDICES_MAP.items():
-                all_assets.extend(v.split(","))
-            unique_assets = list(set(all_assets))
-            loaded_tickers = ",".join(unique_assets)
+        # Load the asset strings dynamically into the pool
+        if selected_index == "Full Permanent Memory List":
+            df_full_mem = pd.read_csv(LOCAL_MEMORY_PATH)
+            # Limit the prompt due to text box constraints but parse all on run
+            loaded_tickers = ",".join(df_full_mem['Symbol'].head(500).tolist())
         else:
             loaded_tickers = INDICES_MAP[selected_index]
             
@@ -345,60 +296,54 @@ def main():
             scan_clicked = st.button("🔥 Run Momentum Scan")
 
         if scan_clicked:
-            tickers_list = [x.strip().upper() for x in m_tickers.replace('\n', ',').split(",") if x.strip()]
+            # Fallback to read from file directly if full memory is picked to bypass string box limits
+            if selected_index == "Full Permanent Memory List":
+                tickers_list = pd.read_csv(LOCAL_MEMORY_PATH)['Symbol'].tolist()
+            else:
+                tickers_list = [x.strip().upper() for x in m_tickers.replace('\n', ',').split(",") if x.strip()]
             
             if not tickers_list:
-                st.error("No valid ticker payload found.")
+                st.error("No valid payload.")
                 return
                 
-            st.write(f"Routing processing requests for {len(tickers_list)} chain targets...")
+            st.write(f"Sifting through {len(tickers_list)} asset tapes...")
             
             prog_bar = st.progress(0.0)
             status_text = st.empty()
             momentum_results = []
-            
-            tab2_symbols, tab2_prices, tab2_sectors, tab2_zones, tab2_res = [], [], [], [], []
+            tab2_symbols, tab2_prices, tab2_zones, tab2_res = [], [], [], []
             
             for idx, ticker in enumerate(tickers_list):
-                status_text.text(f"Fetching structural tape: {ticker}...")
+                status_text.text(f"Scanning tape: {ticker}...")
                 m_data = analyze_momentum_setup(ticker, m_exch)
                 momentum_results.append(m_data)
                 
                 if m_data["live_px"] != 0.0:
                     tab2_symbols.append(ticker)
                     tab2_prices.append(f"₹{m_data['live_px']}")
-                    tab2_sectors.append(m_data['sector'])
                     tab2_zones.append('🔥 HIT' if m_data['buy_zone'] else '❌ OUTSIDE')
                     tab2_res.append('✅ YES' if m_data['rs_resilient'] else '❌ NO')
                 
                 prog_bar.progress((idx + 1) / len(tickers_list))
                 
-            status_text.success("Scan network execution finished!")
+            status_text.success("Protocol execution finished!")
             
             st.session_state['scanned_df'] = pd.DataFrame({
-                "Symbol": tab2_symbols,
-                "Sector": tab2_sectors,
-                "Price": tab2_prices,
-                "21MA BUY ZONE": tab2_zones,
-                "RS RESILIENT": tab2_res
+                "Symbol": tab2_symbols, "Price": tab2_prices,
+                "21MA BUY ZONE": tab2_zones, "RS RESILIENT": tab2_res
             })
             
-            # Divide stocks into hits and others
             perfect_hits = []
             other_results = []
-            
             for r in momentum_results:
-                if r["live_px"] == 0.0:
-                    continue
+                if r["live_px"] == 0.0: continue
                 if r["rs_resilient"] and r["buy_zone"]:
                     perfect_hits.append(r)
                 else:
                     other_results.append(r)
             
-            # --- GROUPED LAYOUT EXECUTION ---
-            
-            # 1. Top Section: Grouped Perfect Fits
-            st.markdown("<div class='group-header'>🔥 Momentum Picks (Perfect Filters)</div>", unsafe_allow_html=True)
+            # Visual Clustered Outputs
+            st.markdown("<div class='group-header'>🔥 Group 1: Perfect Momentum Picks</div>", unsafe_allow_html=True)
             if perfect_hits:
                 for r in perfect_hits:
                     st.markdown(f"""
@@ -417,10 +362,9 @@ def main():
                     </div>
                     """, unsafe_allow_html=True)
             else:
-                st.info("No candidates strictly matched all criteria in this execution run.")
+                st.info("No candidates locked all parameters.")
             
-            # 2. Bottom Section: Grouped Normal Results
-            st.markdown("<div class='group-header'>📊 Monitored Asset Pool</div>", unsafe_allow_html=True)
+            st.markdown("<div class='group-header'>📊 Group 2: Monitored Asset Pool</div>", unsafe_allow_html=True)
             for r in other_results:
                 st.markdown(f"""
                 <div class="scard">
@@ -436,14 +380,6 @@ def main():
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-                
-            st.markdown("<div class='slbl'>Active Telemetry</div>", unsafe_allow_html=True)
-            st.markdown(f"""
-            <div class='kpis'>
-                <div class='kpi'><div class='v csky'>{len(tickers_list)}</div><div class='l'>Tracked</div></div>
-                <div class='kpi'><div class='v csage'>{len(perfect_hits)}</div><div class='l'>Qualified Fits</div></div>
-            </div>
-            """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
