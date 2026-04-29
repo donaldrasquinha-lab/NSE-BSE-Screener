@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Upstox Hub with Token Status
+Tab 1: Upstox Hub with Token Status (Refined for API v2)
 Tab 2: Database Tab populated with Sector Analytics and Plots
 Tab 3: Momentum Strategy Hub with Priority Sorting & Ribbon Banners
 
@@ -24,7 +24,7 @@ from plotly.subplots import make_subplots
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES & SECTOR MAP
 # ===========================================================================
-UPSTOX_BASE  = "https://upstox.com"
+UPSTOX_BASE  = "https://api.upstox.com/v2"
 
 # Hardcoded index asset mappings for standard and momentum scanning
 INDICES_MAP = {
@@ -149,11 +149,19 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 # ===========================================================================
 
 def check_upstox_token(token: str) -> bool:
-    """Verifies Upstox Token validity by pinging the profile endpoint."""
-    if not token:
+    """
+    Verifies Upstox Token validity by pinging the profile endpoint.
+    Handles Bearer spacing and empty edge cases explicitly for v2 APIs.
+    """
+    clean_token = token.strip() if token else ""
+    if not clean_token:
         return False
+        
     url = f"{UPSTOX_BASE}/user/profile"
-    headers = {'Accept': 'application/json', 'Authorization': f'Bearer {token}'}
+    headers = {
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {clean_token}'
+    }
     try:
         response = requests.get(url, headers=headers, timeout=5)
         return response.status_code == 200
@@ -219,13 +227,13 @@ def main():
 
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
-    # --- TAB 1: SCREENER ---
+    # --- TAB 1: SCREENER (Now handles Upstox v2) ---
     with tab_screener:
         st.markdown("<div class='slbl'>Upstox API Authentication</div>", unsafe_allow_html=True)
         if 'upstox_token' not in st.session_state:
             st.session_state['upstox_token'] = ""
             
-        token_input = st.text_input("Enter Upstox Access Token", value=st.session_state['upstox_token'], type="password")
+        token_input = st.text_input("Enter Upstox Access Token (v2)", value=st.session_state['upstox_token'], type="password")
         
         if token_input:
             st.session_state['upstox_token'] = token_input
