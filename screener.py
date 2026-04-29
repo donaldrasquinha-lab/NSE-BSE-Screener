@@ -117,26 +117,23 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 
 def check_upstox_token(token: str) -> bool:
     """
-    Verifies Upstox Token validity using the charges/brokerage endpoint.
-    This does not require read permissions and heavily validates active access tokens.
+    Verifies Upstox Token validity using the strict v2 profile endpoint.
+    Includes the mandatory 'Api-Version': '2.0' header.
     """
     clean_token = token.strip() if token else ""
     if not clean_token:
         return False
         
-    url = "https://upstox.com/charges/brokerage"
+    url = f"{UPSTOX_BASE}/user/profile"
     
-    # Precise capitalization and spacing
     headers = {
-        'Accept': 'application/json',
-        'Authorization': f'Bearer {clean_token}'
+        'Accept': 'application/json', 
+        'Authorization': f'Bearer {clean_token}',
+        'Api-Version': '2.0'  # Explicitly required for v2 interactions
     }
     
-    # Dummy parameters required by endpoint
-    params = {'instrument_token': 'NSE_EQ|INE848E01016', 'quantity': 1, 'product': 'I', 'transaction_type': 'B', 'price': 100}
-    
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=5)
+        response = requests.get(url, headers=headers, timeout=5)
         return response.status_code == 200
     except Exception:
         return False
@@ -203,6 +200,13 @@ def main():
     if 'uploaded_instruments' not in st.session_state:
         st.session_state['uploaded_instruments'] = pd.DataFrame()
 
+    st.markdown("""
+    <div class='hdr'>
+        <h1>NSE + BSE Multibagger Screener</h1>
+        <div class='sub'>V6.0 • REAL-TIME DATA PROCESSING ENGINE</div>
+    </div>
+    """, unsafe_allow_html=True)
+
     tab_screener, tab_db, tab_momentum = st.tabs(["Screener", "Database", "Momentum Strategy"])
 
     # --- TAB 1: SCREENER ---
@@ -218,7 +222,7 @@ def main():
             if check_upstox_token(token_input):
                 st.success("Upstox Status: Connected successfully!")
             else:
-                st.error("Upstox Status: Disconnected. Invalid or expired token.")
+                st.error("Upstox Status: Disconnected. Invalid token.")
         else:
             st.warning("Upstox Status: Disconnected. Waiting for token input.")
             
