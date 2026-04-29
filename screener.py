@@ -147,7 +147,7 @@ def main():
         total_assets = len(unique_assets)
         num_batches = math.ceil(total_assets / batch_size)
         
-               st.session_state['auto_run'] = st.checkbox("Enable Automated Loop", value=st.session_state['auto_run'])
+        st.session_state['auto_run'] = st.checkbox("Enable Automated Loop", value=st.session_state['auto_run'])
         manual_run = st.button("🛰️ Pull & Process Selected Batch")
 
         # 🟢 CRITICAL FIX: Bypass the button state loss during st.rerun()
