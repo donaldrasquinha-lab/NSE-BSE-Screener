@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 NSE + BSE Multibagger Screener v6.0 -- Streamlit Edition
-Tab 1: Cloud Sync supporting Yahoo Finance & Upstox v2.0 in Batches of 100
-Tab 2: Master Ledger Database for hardcoded Nifty 50 & Custom 500
-Tab 3: Clustered Momentum Results Grid
+Tab 1: Cloud Sync supporting Yahoo & Upstox in Batches of 50
+Tab 2: Master Ledger Database that continuously appends results
+Tab 3: Clustered Momentum Results Grid sorted from the full database
 
 INSTALL:  pip install streamlit requests numpy pandas yfinance plotly
 RUN:      streamlit run screener_st.py
 """
 
 import io
+import math
 import requests
 import numpy  as np
 import pandas as pd
@@ -20,9 +21,9 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
-UPSTOX_BASE = "https://api.upstox.com/v2"
+UPSTOX_BASE = "https://upstox.com"
 
-# Hardcoded massive pool mapped exactly to your prompt input (approx 500+ assets)
+# Hardcoded massive pool mapped exactly to your prompt input
 BSE_500_TICKERS = (
     "GRSE,ETERNAL,RELIANCE,BANDHANBNK,VEDL,MAZDOCK,HDFCBANK,SUNPHARMA,COCHINSHIP,CEATLTD,"
     "M&M,SBIN,ADANIPOWER,MARUTI,GROWW,COALINDIA,ICICIBANK,BSE,DATAPATTNS,EMMVEE,ONGC,"
@@ -60,7 +61,7 @@ BSE_500_TICKERS = (
     "SONATSOFTW,NEULANDLAB,TRIDENT,PVRINOX,SYNGENE,IOB,CPPLUS,SIGNATURE,ALKEM,CCL,ESCORTS,FLUOROCHEM,"
     "ELECON,SCHAEFFLER,ATUL,GODREJIND,IRB,LTTS,FIRSTCRY,ECLERX,ENDURANCE,SUNTV,SOBHA,ABBOTINDIA,"
     "APTUS,VTL,JMFINANCIL,SHREECEM,BSOFT,ITI,KAJARIACER,CRAFTSMAN,CREDITACC,CHAMBLFERT,TECHNOE,"
-    "CHOLAHLDNG,SUNDARMFIN,AFCONS,CARBORUNIV,BHARTIHEXA,ACC,ANTHEM,SCHNEIDER,BAJAJHLDNG,PINELABS,"
+    "CHOLAHLDNG,SUNDARMFIN,AFCONS,CARBORUNIV,BHARTIHEXA,ACC,AN_THEM,SCHNEIDER,BAJAJHLDNG,PINELABS,"
     "AEGISLOG,MINDACORP,IPCALAB,CANFINHOME,CENTRALBK,NUVAMA,BLS,NIVABUPA,UCOBANK,NAVA,WELSPUNLIV,"
     "AJANTPHARM,GICRE,MEDANTA,JUBLPHARMA,3MINDIA,LATENTVIEW,GABRIEL,TTML,GODIGIT,EMAMILTD,RAINBOW,"
     "JKCEMENT,INDGN,ACE,HDBFS,INDIAMART,ABDL,BLUEJET,POLYMED,ZYDUSWELL,CRISIL,KPRMILL,AEGISVOPAK,"
@@ -71,7 +72,6 @@ BSE_500_TICKERS = (
     "PFIZER,RHIM,JSWDULUX,TRAVELFOOD"
 )
 
-# Baseline Nifty 50 pool
 NIFTY_50_TICKERS = (
     "RELIANCE,TCS,HDFCBANK,ICICIBANK,INFY,BHARTIARTL,HINDUNILVR,ITC,SBIN,LTIM,ADANIENT,ADANIPORTS,"
     "ASIANPAINT,AXISBANK,BAJAJ-AUTO,BAJFINANCE,BAJAJFINSV,BPCL,BRITANNIA,CIPLA,COALINDIA,DIVISLAB,"
@@ -79,6 +79,15 @@ NIFTY_50_TICKERS = (
     "MARUTI,NESTLEIND,NTPC,ONGC,POWERGRID,SBILIFE,SUNPHARMA,TATACONSUM,TATAMOTORS,TATASTEEL,TECHM,"
     "TITAN,ULTRACEMCO,UPL,WIPRO"
 )
+
+# Baseline Sector mapping for fallbacks
+SECTOR_MAP = {
+    "HDFCBANK": "Financial Services", "ICICIBANK": "Financial Services", "SBIN": "Financial Services", 
+    "AXISBANK": "Financial Services", "KOTAKBANK": "Financial Services", "BAJFINANCE": "Financial Services",
+    "BAJAJFINSV": "Financial Services", "TCS": "IT", "INFY": "IT", "HCLTECH": "IT", "TECHM": "IT", "WIPRO": "IT", 
+    "RELIANCE": "Energy / Oil & Gas", "HINDUNILVR": "FMCG", "ITC": "FMCG", "TATAMOTORS": "Automobile", 
+    "M&M": "Automobile", "SUNPHARMA": "Pharma / Healthcare", "TITAN": "Consumer Durables"
+}
 
 # ===========================================================================
 #  PAGE SETUP & CSS STYLING
@@ -130,6 +139,10 @@ html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"],.main{
 .met .mv{font-size:.84rem;font-weight:600;color:var(--t1);font-family:var(--mono);margin-top:2px;}
 .ribbon{position:absolute;top:10px;right:10px;background:linear-gradient(90deg, #10b981, #059669);
   color:#fff;font-family:var(--mono);font-size:0.55rem;font-weight:700;padding:3px 8px;border-radius:4px;}
+.group-header {
+  font-family: var(--sans); font-size: 1.1rem; font-weight: 700; color: #fff;
+  margin: 15px 0 10px 0; border-bottom: 1px solid var(--border); padding-bottom: 5px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -169,17 +182,17 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
     """Calculates momentum matrix dynamically via Yahoo or Upstox."""
     res = {
         "Symbol": symbol, "Live Price": 0.0, "EPS Accel": "No Data", 
-        "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", "Sector": "Other"
+        "RS Resilient": "❌ NO", "21MA Buy Zone": "❌ OUTSIDE", "Sector": SECTOR_MAP.get(symbol, "Other")
     }
     
     close_px = 0.0
     yf_symbol = f"{symbol}.NS" if exchange == "NSE" else f"{symbol}.BO"
     
-    # Attempt to grab price from Upstox if requested
+    # Attempt Upstox price fetch
     if source == "Upstox" and token:
         close_px = pull_upstox_price(symbol, token, exchange)
         
-    # Standard Yahoo flow for metrics and fallback price
+    # Execution via Yahoo Finance
     try:
         stock = yf.Ticker(yf_symbol)
         hist = stock.history(period="1y")
@@ -214,13 +227,14 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
 # ===========================================================================
 
 def main():
+    # 🟢 STATE INITIALIZATION: Ensures continuous addition of lists
     if 'scanned_df' not in st.session_state:
-        st.session_state['scanned_df'] = pd.DataFrame()
+        st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
 
     st.markdown("""
     <div class='hdr'>
         <h1>NSE + BSE Multibagger Screener</h1>
-        <div class='sub'>V6.0 • DYNAMIC BATCH EXECUTION</div>
+        <div class='sub'>V6.0 • DYNAMIC ACCUMULATING ENGINE</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -266,25 +280,19 @@ def main():
             unique_assets = [x.strip().upper() for x in custom_list.split(",") if x.strip()]
             exch = "NSE"
 
-        # 🟢 BATCH SELECTION LOGIC
-        # Cap set to 100 for batches as requested.
-        batch_size = 100
+        # 🟢 BATCH SELECTION LOGIC (Set to 50 as requested)
+        batch_size = 50
         total_assets = len(unique_assets)
-        
-        # Calculate number of required batches
         num_batches = math.ceil(total_assets / batch_size)
         
-        # Generate dropdown labels for the batches
         batch_labels = []
         for i in range(num_batches):
             start = i * batch_size
             end = min((i + 1) * batch_size, total_assets)
             batch_labels.append(f"Batch {i+1}: Stocks {start+1} to {end}")
             
-        # Display the dropdown
         selected_batch_idx = st.selectbox("Select Asset Cluster to Process", range(num_batches), format_func=lambda x: batch_labels[x])
         
-        # Sift actual items for loop
         loop_start = selected_batch_idx * batch_size
         loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
         execution_pool = unique_assets[loop_start:loop_end]
@@ -299,22 +307,38 @@ def main():
             for idx, symbol in enumerate(execution_pool):
                 status_box.text(f"Extracting [{data_source}]: {symbol}")
                 
-                # Fetch node
                 data_node = calculate_momentum_node(symbol, data_source, st.session_state['upstox_token'], exch)
                 processed_results.append(data_node)
                 prog_bar.progress((idx + 1) / len(execution_pool))
                 
             status_box.success("Scan cluster limits hit successfully!")
             
-            # Save strictly the latest batch to memory
-            st.session_state['scanned_df'] = pd.DataFrame(processed_results)
+            # 🟢 CONTINUOUS APPENDING LOGIC
+            new_df = pd.DataFrame(processed_results)
+            
+            # Pull old list, combine with new, and remove duplicates keeping the newest data
+            combined_df = pd.concat([st.session_state['scanned_df'], new_df])
+            combined_df.drop_duplicates(subset=["Symbol"], keep='last', inplace=True)
+            
+            # Save the extended list back to session state
+            st.session_state['scanned_df'] = combined_df
 
     # --- TAB 2: DATABASE ---
     with tab_db:
         st.markdown("<div class='slbl'>Database Grid</div>", unsafe_allow_html=True)
+        
         if st.session_state['scanned_df'].empty:
             st.info("No scanned assets in registry. Go to Tab 1 and click the 'Process' button.")
         else:
+            col_db1, col_db2 = st.columns([5, 1])
+            with col_db1:
+                st.write(f"📊 Currently holding **{len(st.session_state['scanned_df'])}** unique processed assets.")
+            with col_db2:
+                # Button to clear session memory
+                if st.button("🗑️ Clear Database"):
+                    st.session_state['scanned_df'] = pd.DataFrame(columns=["Symbol", "Live Price", "EPS Accel", "RS Resilient", "21MA Buy Zone", "Sector"])
+                    st.rerun()
+
             df_full = st.session_state['scanned_df']
             st.dataframe(df_full.sort_values(by='Symbol').reset_index(drop=True), use_container_width=True)
 
