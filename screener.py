@@ -21,10 +21,10 @@ import plotly.graph_objects as go
 # ===========================================================================
 #  CONFIG & CONSTANTS
 # ===========================================================================
-UPSTOX_BASE  = "https://upstox.com"
+UPSTOX_BASE  = "https://api.upstox.com/v2"
 
 # 🟢 Official Upstox compressed Master Instrument URL
-UPSTOX_GZ_URL = "https://upstox.com"
+UPSTOX_GZ_URL = "https://api.upstox.com/v2"
 
 # Fallback mapping to populate clean sectors for known top assets
 SECTOR_MAP = {
