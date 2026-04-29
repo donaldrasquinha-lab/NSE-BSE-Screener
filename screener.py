@@ -144,18 +144,12 @@ def main():
         total_assets = len(unique_assets)
         num_batches = math.ceil(total_assets / batch_size)
         
-        # 🟢 CRASH FIX: Ensure the active index is never out of bounds
-        if st.session_state['active_batch_idx'] >= num_batches:
-            st.session_state['active_batch_idx'] = 0
-            
-        selected_batch_idx = st.selectbox(
-            "Select Asset Cluster to Process", 
-            range(num_batches), 
-            index=st.session_state['active_batch_idx'], 
-            format_func=lambda x: f"Batch {x+1}: Stocks {x*batch_size+1} to {min((x+1)*batch_size, total_assets)}"
-        )
-        st.session_state['active_batch_idx'] = selected_batch_idx
-
+             # 1. Map out the start and end slicing indices
+        loop_start = selected_batch_idx * batch_size
+        loop_end = min((selected_batch_idx + 1) * batch_size, total_assets)
+        
+        # 🟢 THE FIX: Explicitly define the pool that was throwing the NameError
+        execution_pool = unique_assets[loop_start:loop_end]
 
         st.session_state['auto_run'] = st.checkbox("Enable Automated Loop", value=st.session_state['auto_run'])
         manual_run = st.button("🛰️ Pull & Process Selected Batch")
@@ -165,10 +159,11 @@ def main():
             prog_bar = st.progress(0.0)
             processed_results = []
             
+            # This loop will now execute perfectly without the NameError!
             for idx, symbol in enumerate(execution_pool):
                 processed_results.append(calculate_momentum_node(symbol, data_source, token_input))
                 prog_bar.progress((idx + 1) / len(execution_pool))
-                
+
             new_df = pd.DataFrame(processed_results)
             combined_df = pd.concat([st.session_state['scanned_df'], new_df]).drop_duplicates(subset=["Symbol"], keep='last')
             st.session_state['scanned_df'] = combined_df
@@ -376,6 +371,5 @@ def main():
                 st.markdown("<div class='slbl'>Momentum Picks Ledger</div>", unsafe_allow_html=True)
                 st.dataframe(df_momentum.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
-
 if __name__ == "__main__":
-    main()
+ main()
