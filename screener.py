@@ -133,7 +133,7 @@ def main():
     tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"])
 
     with tab_screener:
-    token_input = st.text_input("Enter Upstox Access Token (v2)", type="password")
+        token_input = st.text_input("Enter Upstox Access Token (v2)", type="password")
         if token_input:
         if check_upstox_token(token_input): st.success("Upstox Status: Connected!")
         else: st.error("Upstox Status: Invalid Token.")
