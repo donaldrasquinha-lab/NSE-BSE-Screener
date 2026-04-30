@@ -148,7 +148,7 @@ def main():
 st_autorefresh(interval=60 * 1000, key="news_pulse")
 
                 # --- NEWS TICKER SETUP ---
-        financial_news = [
+    financial_news = [
             "🇮🇳 Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
             "🇮🇳 Rupee hits record low of 95.20 against USD as tensions rise.",
             "🌍 Brent Crude hits $126/barrel following US-Iran naval threats.",
