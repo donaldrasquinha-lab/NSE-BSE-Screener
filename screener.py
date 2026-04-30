@@ -315,29 +315,32 @@ def main():
         
         st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
         
-        # Row 1: Global & Commodities
-        st.subheader("Global Markets & Commodities")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        # Corrected Tickers: Gold(GC=F), Dow Fut(YM=F), Nasdaq(NQ=F), S&P(ES=F), BTC(BTC-USD)
-        m_gold, c_gold = get_market_metric("GC=F")
-        m_dow, c_dow = get_market_metric("YM=F")
-        m_nas, c_nas = get_market_metric("NQ=F")
-        m_spx, c_spx = get_market_metric("ES=F")
-        
-        # 🟢 Hardened Bitcoin Fetch
-        m_btc, c_btc = get_market_metric("BTC-USD")
-        if m_btc == 0.0:
-            # Fallback to Binance BTC price proxy if USD pair fails
-            m_btc, c_btc = get_market_metric("BTCUSD=X") 
+     def get_market_metric(ticker_symbol):
+    """Fetches price and % change with multiple ticker fallback logic."""
+    # Define fallback paths for specific unreliable tickers
+    fallbacks = {
+        "BTC-USD": ["BTC-USD", "BTCUSD=X", "BTC-INR"],
+        "IN=F": ["IN=F", "^NSEI", "NIFTY50.NS"]
+    }
     
-        col1.metric("Gold", f"${m_gold}", f"{c_gold}%")
-        col2.metric("Dow Jones Fut", f"{m_dow}", f"{c_dow}%")
-        col3.metric("Nasdaq 100", f"{m_nas}", f"{c_nas}%")
-        col4.metric("S&P 500", f"{m_spx}", f"{c_spx}%")
-        col5.metric("Bitcoin", f"${m_btc}", f"{c_btc}%")
-        
-        st.divider()
+    tickers_to_try = fallbacks.get(ticker_symbol, [ticker_symbol])
+    
+    for symbol in tickers_to_try:
+        try:
+            ticker = yf.Ticker(symbol)
+            # Use period='5d' to ensure we have enough days for % change calc
+            data = ticker.history(period="5d")
+            if not data.empty and len(data) >= 2:
+                close_px = data['Close'].iloc[-1]
+                prev_close = data['Close'].iloc[-2]
+                pct_change = ((close_px - prev_close) / prev_close) * 100
+                return round(close_px, 2), round(pct_change, 2)
+            elif not data.empty and len(data) == 1:
+                return round(data['Close'].iloc[-1], 2), 0.0
+        except:
+            continue
+    return 0.0, 0.0
+
         
         # Row 2: Indian Indices
         st.subheader("Indian Indices & GIFT Nifty")
@@ -361,22 +364,21 @@ def main():
         col10.metric("Sensex", f"{m_sen}", f"{c_sen}%")
         
         # 🟢 NEW: Fixed News Section (Using direct RSS fallback if yfinance.news is empty)
-        st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
-        try:
-            # Try fetching from a broader market proxy ticker
-            raw_news = yf.Ticker("RELIANCE.NS").news
-            if not raw_news:
-                raw_news = yf.Ticker("^NSEI").news
-                
-            if raw_news:
-                for item in raw_news[:5]:
-                    with st.expander(f"📌 {item['title']}", expanded=True):
-                        st.write(f"Source: {item['publisher']}")
-                        st.markdown(f"[Read Full Article]({item['link']})")
-            else:
-                st.info("Yahoo News API returned no records. Ensure you're not on a restricted VPN/Network.")
-        except Exception as e:
-            st.error("Headline sync connection reset. Refreshing news stream...")
+            st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
+    try:
+        # Reliance is the most reliable news feed proxy for India
+        news_ticker = yf.Ticker("RELIANCE.NS")
+        raw_news = news_ticker.news
+        
+        if raw_news:
+            for item in raw_news[:5]:
+                with st.container(border=True): # Adds a nice box around news
+                    st.markdown(f"**{item['title']}**")
+                    st.caption(f"Source: {item['publisher']} | [Read More]({item['link']})")
+        else:
+            st.info("News feed is currently refreshing...")
+    except:
+        st.info("Headlines temporarily unavailable.")
 
 
 
