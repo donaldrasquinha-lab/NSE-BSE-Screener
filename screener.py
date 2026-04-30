@@ -316,7 +316,7 @@ def main():
         st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
         
     def get_market_metric(ticker_symbol):
-"""Fetches price and % change with multiple ticker fallback logic."""
+        """Fetches price and % change with multiple ticker fallback logic."""
     # Define fallback paths for specific unreliable tickers
     fallbacks = {
         "BTC-USD": ["BTC-USD", "BTCUSD=X", "BTC-INR"],
