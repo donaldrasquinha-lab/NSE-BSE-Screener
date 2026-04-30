@@ -204,35 +204,34 @@ def main():
         st_autorefresh(interval=60 * 1000, key="news_pulse")
 
         import streamlit as st
-
-        st.link_button("View Live NSE News on TradingView", "https://tradingview.com")
         
-        # Ensure this block is aligned with your main code (no extra spaces at start)
-        s.markdown("### 📰 Indian Market Real-Time News")
+        # Verified news items for April 30, 2026
+        news_data = [
+            "🇮🇳 INDIAN NEWS: Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
+            "🇮🇳 INDIAN NEWS: Rupee hits record low of 95.20 against US Dollar as geopolitical tensions rise.",
+            "🇮🇳 INDIAN NEWS: India's GDP growth forecast (7-7.4%) clouded by West Asia conflict, says Finance Ministry.",
+            "🌍 GLOBAL NEWS: Brent Crude hits $126 per barrel following US-Iran naval blockade threats.",
+            "🌍 GLOBAL NEWS: US Fed holds rates at 3.5–3.75% in Jerome Powell's final term meeting.",
+            "🌍 GLOBAL NEWS: UAE officially exits OPEC, creating a major shift in global energy markets.",
+            "🌍 GLOBAL NEWS: Big Tech Spending: Microsoft and Alphabet announce massive AI capital investments."
+        ]
         
-        # TradingView News Timeline Widget
-        # Focused on "NSE" and "BSE" news via the 'in' locale
-        news_html = """
-        <div class="tradingview-widget-container" style="height: 500px;">
-          <div class="tradingview-widget-container__widget"></div>
-          <script type="text/javascript" src="https://tradingview.com" async>
-          {
-            "feedMode": "market",
-            "market": "stock",
-            "isTransparent": false,
-            "displayMode": "regular",
-            "width": "100%",
-            "height": "100%",
-            "colorTheme": "dark",
-            "locale": "in"
-          }
-          </script>
-        </div>
-        """
+        # Combine news for the ticker
+        ticker_text = " • ".join(news_data)
         
-        # Render with enough height to prevent internal scrolling issues
-        components.html(news_html, height=520, scrolling=False)
-
+        # News Ticker UI
+        st.markdown(
+            f"""
+            <div style="background-color: #0e1117; padding: 12px; border-top: 2px solid #ff4b4b; border-bottom: 2px solid #ff4b4b; overflow: hidden;">
+                <marquee behavior="scroll" direction="right" scrollamount="7">
+                    <span style="color: #ffffff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 1.15rem; font-weight: 500;">
+                        {ticker_text}
+                    </span>
+                </marquee>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
             
     with tab_screener:
