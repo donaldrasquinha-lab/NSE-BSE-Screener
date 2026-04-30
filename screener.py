@@ -207,7 +207,7 @@ def main():
     st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
     
     # Corrected TradingView News Widget
-    tv_widget = """
+        tv_widget = """
         <div class="tradingview-widget-container">
           <div class="tradingview-widget-container__widget"></div>
           <script type="text/javascript" src="https://tradingview.com" async>
@@ -225,8 +225,9 @@ def main():
         """
         
         # Render the widget
-            st.components.v1.html(tv_widget, height=520)
-            st.info("💡 Data provided by TradingView Real-Time Feed")
+        st.components.v1.html(tv_widget, height=520)
+        
+        st.info("💡 Data provided by TradingView Real-Time Feed")
 
             
     with tab_screener:
