@@ -323,7 +323,7 @@ def main():
             "IN=F": ["IN=F", "^NSEI", "NIFTY50.NS"]
         }
         
-            tickers_to_try = fallbacks.get(ticker_symbol, [ticker_symbol])
+        tickers_to_try = fallbacks.get(ticker_symbol, [ticker_symbol])
         
             for symbol in tickers_to_try:
             try:
@@ -364,7 +364,7 @@ def main():
         
         # 🟢 NEW: Fixed News Section (Using direct RSS fallback if yfinance.news is empty)
         st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
-    try:
+     try:
         # Reliance is the most reliable news feed proxy for India
         news_ticker = yf.Ticker("RELIANCE.NS")
         raw_news = news_ticker.news
@@ -376,7 +376,7 @@ def main():
                     st.caption(f"Source: {item['publisher']} | [Read More]({item['link']})")
         else:
             st.info("News feed is currently refreshing...")
-    except:
+     except:
         st.info("Headlines temporarily unavailable.")
 
 
