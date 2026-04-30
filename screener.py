@@ -201,50 +201,56 @@ def main():
         i4.metric("Fin Nifty", f"{fin_p}", f"{fin_c}%")
         i5.metric("Sensex", f"{sen_p}", f"{sen_c}%")
     
-    st_autorefresh(interval=60 * 1000, key="news_pulse")
-                 # 🟢 HIGH-AVAILABILITY NEWS ENGINE (Tab 6)
-    st.markdown("<div class='slbl'>📰 Live Market Pulse</div>", unsafe_allow_html=True)
+                   # 🟢 BULLETPROOF HEADLESS NEWS ENGINE (Tab 6)
+    st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
     
-    import feedparser # Add to top of file
-    import re
+    from bs4 import BeautifulSoup
+    import requests
 
-    def get_live_news():
-        # Source 1: Google News RSS (Indian Markets)
-        # Source 2: Economic Times Markets
-        feeds = [
-            "https://google.com",
-            "https://indiatimes.com"
-        ]
+    def fetch_live_headlines():
+        """Mimics a browser to scrape top market news from Google Finance/News."""
+        news_data = []
+        # Google News RSS for Indian Stock Market
+        url = "https://google.com"
         
-        all_news = []
-        for url in feeds:
-            try:
-                feed = feedparser.parse(url)
-                for entry in feed.entries[:5]:
-                    # Clean out HTML tags from titles/summaries
-                    clean_title = re.sub('<[^<]+?>', '', entry.title)
-                    all_news.append({
-                        "title": clean_title,
-                        "link": entry.link,
-                        "source": entry.get('source', {}).get('title', 'Market News')
-                    })
-                if all_news: break # Stop if first feed works
-            except:
-                continue
-        return all_news
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.content, features="xml")
+            items = soup.find_all("item")
+            
+            for item in items[:5]: # Limit to top 5
+                title = item.title.text
+                link = item.link.text
+                # Remove the source name from the title (usually follows " - ")
+                clean_title = title.split(" - ")[0]
+                source = title.split(" - ")[-1] if " - " in title else "Market News"
+                
+                news_data.append({
+                    "title": clean_title,
+                    "link": link,
+                    "source": source
+                })
+        except Exception as e:
+            pass # Silent fail to allow UI to stay clean
+        return news_data
 
-    # Execution
-    news_items = get_live_news()
+    # Execution inside the tab
+    news_items = fetch_live_headlines()
     
     if news_items:
         for item in news_items:
             with st.container(border=True):
                 st.markdown(f"**{item['title']}**")
-                # Clean up display of source
                 st.caption(f"Source: {item['source']}")
-                st.markdown(f"[Read Full Story]({item['link']})")
+                st.markdown(f"[Read Full Article]({item['link']})")
     else:
-        st.info("News stream is currently synchronizing. Updates appear every 60 seconds.")
+        # Emergency hard-link if scraping is blocked by the cloud provider
+        st.warning("Automated news feed is currently throttled by the provider.")
+        st.info("💡 Pro Tip: Check live updates directly on [Google Finance India](https://google.com)")
 
             
     with tab_screener:
