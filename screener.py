@@ -160,7 +160,7 @@ def display_news_ticker():
         
     ticker_html = f"""
         <div style="background-color: #0e1117; padding: 10px; border-bottom: 1px solid #31333F; margin-bottom: 20px;">
-            <marquee behavior="scroll" direction="left" scrollamount="8">
+            <marquee behavior="scroll" direction="right" scrollamount="8">
                 <span style="color: #ff4b4b; font-family: monospace; font-size: 1rem; font-weight: bold;">
                     {ticker_text}
                 </span>
