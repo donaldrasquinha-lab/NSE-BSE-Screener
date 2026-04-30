@@ -168,8 +168,7 @@ def display_vertical_news_ticker():
 
     # Join news with a wrapper for animation
     news_html = "".join([f'<div class="news-item">{item}</div>' for item in financial_news])
-
-        # Ticker CSS with "absolute" positioning to hug the top
+    # Ticker CSS with "absolute" positioning to hug the top
     ticker_css = f"""
     <style>
         .top-ticker-wrapper {{
@@ -199,7 +198,7 @@ def display_vertical_news_ticker():
             {" ".join([f"{(100/len(financial_news))*i}% {{ transform: translateY(-{i*40}px); }}" for i in range(len(financial_news))])}
             100% {{ transform: translateY(-{len(financial_news)*40}px); }}
         }}
-          /* Add margin to your main app content so it doesn't hide under the ticker */
+        /* Add margin to your main app content so it doesn't hide under the ticker */
         .main-content-padding {{
             margin-top: 50px;
         }}
@@ -213,8 +212,9 @@ def display_vertical_news_ticker():
     <div class="main-content-padding"></div>
     """
     st.markdown(ticker_css, unsafe_allow_html=True)
-    """
-    st.markdown(ticker_css, unsafe_allow_html=True)
+
+display_vertical_news_ticker()
+        
 
 display_vertical_news_ticker()
 
