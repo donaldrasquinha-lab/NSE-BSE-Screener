@@ -341,10 +341,9 @@ def main():
             continue
     return 0.0, 0.0
 
-        
         # Row 2: Indian Indices
-        st.subheader("Indian Indices & GIFT Nifty")
-        col6, col7, col8, col9, col10 = st.columns(5)
+            st.subheader("Indian Indices & GIFT Nifty")
+            col6, col7, col8, col9, col10 = st.columns(5)
         
         # Tickers: GIFT Nifty (IN=F), Nifty 50 (^NSEI), Bank Nifty (^NSEBANK), Fin Nifty (NIFTY_FIN_SERVICE.NS), Sensex (^BSESN)
         # 🟢 Better GIFT Nifty Proxy: Using the Nifty 50 Index itself if the specific future is between rolls
