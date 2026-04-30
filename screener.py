@@ -309,37 +309,37 @@ def main():
             st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
 # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
-    with tab_market:
-        # 🟢 Auto-refresh every 60 seconds
-        st_autorefresh(interval=60 * 1000, key="market_refresh")
+        with tab_market:
+            # 🟢 Auto-refresh every 60 seconds
+            st_autorefresh(interval=60 * 1000, key="market_refresh")
+            
+            st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
+            
+        def get_market_metric(ticker_symbol):
+            """Fetches price and % change with multiple ticker fallback logic."""
+        # Define fallback paths for specific unreliable tickers
+        fallbacks = {
+            "BTC-USD": ["BTC-USD", "BTCUSD=X", "BTC-INR"],
+            "IN=F": ["IN=F", "^NSEI", "NIFTY50.NS"]
+        }
         
-        st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
+        tickers_to_try = fallbacks.get(ticker_symbol, [ticker_symbol])
         
-    def get_market_metric(ticker_symbol):
-        """Fetches price and % change with multiple ticker fallback logic."""
-    # Define fallback paths for specific unreliable tickers
-    fallbacks = {
-        "BTC-USD": ["BTC-USD", "BTCUSD=X", "BTC-INR"],
-        "IN=F": ["IN=F", "^NSEI", "NIFTY50.NS"]
-    }
-    
-    tickers_to_try = fallbacks.get(ticker_symbol, [ticker_symbol])
-    
-    for symbol in tickers_to_try:
-        try:
-            ticker = yf.Ticker(symbol)
-            # Use period='5d' to ensure we have enough days for % change calc
-            data = ticker.history(period="5d")
-            if not data.empty and len(data) >= 2:
-                close_px = data['Close'].iloc[-1]
-                prev_close = data['Close'].iloc[-2]
-                pct_change = ((close_px - prev_close) / prev_close) * 100
-                return round(close_px, 2), round(pct_change, 2)
-            elif not data.empty and len(data) == 1:
-                return round(data['Close'].iloc[-1], 2), 0.0
-        except:
-            continue
-    return 0.0, 0.0
+        for symbol in tickers_to_try:
+            try:
+                ticker = yf.Ticker(symbol)
+                # Use period='5d' to ensure we have enough days for % change calc
+                data = ticker.history(period="5d")
+                if not data.empty and len(data) >= 2:
+                    close_px = data['Close'].iloc[-1]
+                    prev_close = data['Close'].iloc[-2]
+                    pct_change = ((close_px - prev_close) / prev_close) * 100
+                    return round(close_px, 2), round(pct_change, 2)
+                elif not data.empty and len(data) == 1:
+                    return round(data['Close'].iloc[-1], 2), 0.0
+            except:
+                continue
+        return 0.0, 0.0
 
         # Row 2: Indian Indices
         st.subheader("Indian Indices & GIFT Nifty")
