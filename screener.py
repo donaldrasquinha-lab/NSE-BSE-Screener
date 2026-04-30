@@ -138,29 +138,25 @@ import requests
 import streamlit as st
 
 def get_yahoo_global_news():
-    # Primary: Yahoo Finance Stock Market | Secondary: Google News Global Markets
-    urls = [
-        "https://yahoo.com",
-        "https://google.com"
-    ]
+    # Correct RSS URL for Yahoo Finance
+    rss_url = "https://yahoo.com"
     
     headlines = []
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-    for url in urls:
-        try:
-            # Using browser headers is critical for Yahoo feeds to load
-            response = requests.get(url, headers=headers, timeout=10)
-            feed = feedparser.parse(response.content)
-            
-            if feed.entries:
-                # Extract top 10 titles and clean up any HTML entities
-                headlines = [entry.title.replace('&#39;', "'").replace('&amp;', '&') for entry in feed.entries[:10]]
-                break
-        except Exception:
-            continue
+    try:
+        # Fetch data with requests first to avoid feedparser timeout issues
+        response = requests.get(rss_url, headers=headers, timeout=10)
+        feed = feedparser.parse(response.content)
+        
+        if feed.entries:
+            headlines = [entry.title for entry in feed.entries[:10]]
+    except Exception:
+        # Fallback if Yahoo is down
+        headlines = ["Unable to fetch Yahoo News. Please check connection."]
 
-    return headlines if headlines else ["Connecting to Yahoo Global News..."]
+    return headlines
+
 
 # ===========================================================================
 #  MAIN APP LAYOUT
