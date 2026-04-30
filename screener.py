@@ -307,7 +307,6 @@ def main():
             st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
             st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
-from streamlit_autorefresh import st_autorefresh # pip install streamlit-autorefresh
 
 # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
 with tab_market:
