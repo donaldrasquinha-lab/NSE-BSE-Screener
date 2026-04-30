@@ -203,48 +203,33 @@ def main():
 
     st_autorefresh(interval=60 * 1000, key="news_pulse")
 
-                        # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
-    st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
-    
-    # We use an IFrame to load a professional market ticker. 
-    # This bypasses all server-side blocks because YOUR browser loads it.
-    news_widget_html = """
-    <div style="height:500px; overflow:hidden; border-radius:10px; border:1px solid #1e2740;">
-        <iframe 
-            src="https://moneycontrol.com" 
-            width="100%" 
-            height="600" 
-            style="border:none; margin-top:-100px;" 
-            sandbox="allow-scripts allow-same-origin">
-        </iframe>
-    </div>
-    """
-    
-    # Alternative: A cleaner, smaller TradingView News Widget
-    tv_widget = """
-    <div class="tradingview-widget-container">
-      <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="https://tradingview.com" async>
-      {
-      "feedMode": "market",
-      "market": "stock",
-      "is720": true,
-      "colorTheme": "dark",
-      "displayMode": "regular",
-      "width": "100%",
-      "height": "500",
-      "locale": "in",
-      "customer": "nse"
-    }
-      </script>
-    </div>
-    """
+import streamlit as st
 
-    # Choose one: Direct MoneyControl IFrame OR TradingView Widget
-    # The TradingView widget is usually cleaner for dashboards.
-    st.components.v1.html(tv_widget, height=520)
-    
-    st.info("💡 Data provided by TradingView Real-Time Feed")
+# 🟢 BLOCK-PROOF LIVE NEWS WIDGET
+st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
+
+# Corrected TradingView News Widget
+tv_widget = """
+<div class="tradingview-widget-container">
+  <div class="tradingview-widget-container__widget"></div>
+  <script type="text/javascript" src="https://tradingview.com" async>
+  {
+  "feedMode": "all_symbols",
+  "isStandard": true,
+  "colorTheme": "dark",
+  "displayMode": "regular",
+  "width": "100%",
+  "height": 500,
+  "locale": "in"
+}
+  </script>
+</div>
+"""
+
+# Render the widget
+st.components.v1.html(tv_widget, height=520)
+
+st.info("💡 Data provided by TradingView Real-Time Feed")
 
             
     with tab_screener:
