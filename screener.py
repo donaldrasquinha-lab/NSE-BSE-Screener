@@ -224,9 +224,8 @@ def main():
         </div>
         """
         
-    # Render the widget
+        # Render the widget
         st.components.v1.html(tv_widget, height=520)
-        
         st.info("💡 Data provided by TradingView Real-Time Feed")
 
             
