@@ -204,7 +204,9 @@ def main():
         st_autorefresh(interval=60 * 1000, key="news_pulse")
 
         import streamlit as s
-        import streamlit.components.v1 as components
+
+        s.link_button("View Live NSE News on TradingView", "https://tradingview.com")
+        
         # Ensure this block is aligned with your main code (no extra spaces at start)
         s.markdown("### 📰 Indian Market Real-Time News")
         
