@@ -203,9 +203,7 @@ def main():
 
     st_autorefresh(interval=60 * 1000, key="news_pulse")
 
-import streamlit as st
-
-    # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
+        # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
         st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
     
         # Corrected TradingView News Widget
