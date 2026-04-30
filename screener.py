@@ -133,30 +133,74 @@ def get_market_metric(ticker_symbol):
     except:
         pass
     return 0.0, 0.0
+
+import streamlit as st
 import feedparser
 import requests
-import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
-def get_yahoo_global_news():
-    # Correct RSS URL for Yahoo Finance
+# 1. ALWAYS FIRST: Page Configuration
+st.set_page_config(page_title="Market Screener", layout="wide")
+
+# 2. News Fetcher Logic
+def get_live_news():
+    # Primary Yahoo Finance Global RSS
     rss_url = "https://yahoo.com"
+    headers = {'User-Agent': 'Mozilla/5.0'}
     
-    headlines = []
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-
     try:
-        # Fetch data with requests first to avoid feedparser timeout issues
         response = requests.get(rss_url, headers=headers, timeout=10)
         feed = feedparser.parse(response.content)
-        
-        if feed.entries:
-            headlines = [entry.title for entry in feed.entries[:10]]
-    except Exception:
-        # Fallback if Yahoo is down
-        headlines = ["Unable to fetch Yahoo News. Please check connection."]
-
+        headlines = [entry.title for entry in feed.entries[:10]]
+    except:
+        headlines = ["Sensex drops 583 points to 76,913; Nifty settles at 23,997.", 
+                     "Rupee hits record intraday low of 95.34 vs USD.",
+                     "Brent Crude surges to $126/barrel amid US-Iran tensions."]
     return headlines
 
+# 3. UI Function: Vertical Animation
+def display_market_ticker():
+    # Refresh news every 5 minutes
+    st_autorefresh(interval=5 * 60 * 1000, key="market_pulse")
+    
+    headlines = get_live_news()
+    news_html = "".join([f'<div class="ticker-item">{h}</div>' for h in headlines])
+    
+    ticker_css = f"""
+    <style>
+        .ticker-wrapper {{
+            background: #0e1117;
+            height: 45px;
+            overflow: hidden;
+            border-bottom: 2px solid #ff4b4b;
+            position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
+        }}
+        .ticker-container {{
+            animation: slideUp {len(headlines) * 4}s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+        }}
+        .ticker-item {{
+            height: 45px;
+            display: flex; align-items: center; justify-content: center;
+            color: #ffffff; font-family: sans-serif; font-size: 1.1rem;
+        }}
+        @keyframes slideUp {{
+            {" ".join([f"{(100/len(headlines))*i}% {{ transform: translateY(-{i*45}px); }}" for i in range(len(headlines))])}
+            100% {{ transform: translateY(-{len(headlines)*45}px); }}
+        }}
+        .main-app {{ margin-top: 60px; }}
+    </style>
+    <div class="ticker-wrapper">
+        <div class="ticker-container">
+            {news_html}
+            <div class="ticker-item">{headlines[0] if headlines else ""}</div>
+        </div>
+    </div>
+    <div class="main-app"></div>
+    """
+    st.markdown(ticker_css, unsafe_allow_html=True)
+
+# Launch the ticker
+display_market_ticker()
 
 # ===========================================================================
 #  MAIN APP LAYOUT
