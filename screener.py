@@ -143,7 +143,7 @@ def main():
 
     st.markdown("<div class='hdr'><h1>NSE + BSE Multibagger Screener</h1></div>", unsafe_allow_html=True)
     
-    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap, tab_market = st.tabs(["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub", "🗺️ Sector Heatmap", "🌐 Market Plus"])
+    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap, tab_market = st.tabs(["🌐 Market Plus","Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub", "🗺️ Sector Heatmap"])
 
 
     with tab_screener:
