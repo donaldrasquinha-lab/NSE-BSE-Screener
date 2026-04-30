@@ -169,16 +169,19 @@ def display_vertical_news_ticker():
     # Join news with a wrapper for animation
     news_html = "".join([f'<div class="news-item">{item}</div>' for item in financial_news])
 
-    # CSS for Vertical Flip Animation
+        # Ticker CSS with "absolute" positioning to hug the top
     ticker_css = f"""
     <style>
-        .ticker-wrapper {{
+        .top-ticker-wrapper {{
             background: #0e1117;
             height: 40px;
+            width: 100%;
             overflow: hidden;
-            border-bottom: 2px solid #ff4b4b;
-            margin-bottom: 20px;
-            position: relative;
+            border-bottom: 1px solid #ff4b4b;
+            position: fixed; /* Fixes it to the top of the browser window */
+            top: 0;
+            left: 0;
+            z-index: 1000;
         }}
         .news-container {{
             animation: slideUp {len(financial_news) * 4}s cubic-bezier(0.645, 0.045, 0.355, 1) infinite;
@@ -189,27 +192,32 @@ def display_vertical_news_ticker():
             align-items: center;
             justify-content: center;
             color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-weight: 500;
-            font-size: 1.1rem;
-            white-space: nowrap;
+            font-family: sans-serif;
+            font-size: 0.9rem;
         }}
         @keyframes slideUp {{
             {" ".join([f"{(100/len(financial_news))*i}% {{ transform: translateY(-{i*40}px); }}" for i in range(len(financial_news))])}
             100% {{ transform: translateY(-{len(financial_news)*40}px); }}
         }}
+        /* Add margin to your main app content so it doesn't hide under the ticker */
+        .main-content-padding {{
+            margin-top: 50px;
+        }}
     </style>
-    <div class="ticker-wrapper">
+    <div class="top-ticker-wrapper">
         <div class="news-container">
             {news_html}
-            <div class="news-item">{financial_news[0]}</div> <!-- Duplicate of first item for seamless loop -->
+            <div class="news-item">{financial_news[0]}</div>
         </div>
     </div>
+    <div class="main-content-padding"></div>
     """
     st.markdown(ticker_css, unsafe_allow_html=True)
 
-# Run the vertical ticker
 display_vertical_news_ticker()
+
+st.title("My App Content")
+st.write("Now the content starts right below the ticker.")
 
 # ===========================================================================
 #  MAIN APP LAYOUT
