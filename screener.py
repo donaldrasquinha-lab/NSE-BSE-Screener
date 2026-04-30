@@ -134,27 +134,38 @@ def get_market_metric(ticker_symbol):
         pass
     return 0.0, 0.0
 
-import streamlit as st
 import feedparser
 import requests
+import streamlit as st
 
 def get_live_market_news():
-    # Feeds for Global Finance and India Markets
+    # Reliable financial RSS feeds for 2026
     rss_sources = [
         "https://google.com",
-        "https://google.com"
+        "https://yahoo.com",
+        "https://www.livemint.com/rss/markets"
     ]
+    
     all_headlines = []
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # This header is crucial; it tells the server you're a real browser
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    }
+
     for url in rss_sources:
         try:
-            response = requests.get(url, headers=headers, timeout=5)
-            feed = feedparser.parse(response.content)
-            if feed.entries:
-                all_headlines.extend([entry.title for entry in feed.entries[:5]])
-        except:
+            # Use requests with a timeout to fetch the raw data first
+            response = requests.get(url, headers=headers, timeout=8)
+            if response.status_code == 200:
+                feed = feedparser.parse(response.content)
+                if feed.entries:
+                    all_headlines.extend([entry.title for entry in feed.entries[:5]])
+                    break # Stop if we found headlines from a reliable source
+        except Exception:
             continue
+
     return all_headlines if all_headlines else ["❌ cannot connect to news"]
+
 
 # --- UI DISPLAY CODE ---
 headlines = get_live_market_news()
