@@ -145,9 +145,9 @@ def main():
     if st.session_state['scanned_d'] is not None:
         st.write("Data is ready!")
 
-st_autorefresh(interval=60 * 1000, key="news_pulse")
+    st_autorefresh(interval=60 * 1000, key="news_pulse")
 
-    # --- NEWS TICKER SETUP ---
+# --- NEWS TICKER SETUP ---
     financial_news = [
             "🇮🇳 Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
             "🇮🇳 Rupee hits record low of 95.20 against USD as tensions rise.",
@@ -156,7 +156,7 @@ st_autorefresh(interval=60 * 1000, key="news_pulse")
         ]
     ticker_text = " • ".join(financial_news)
         
-    # CSS/HTML for the ticker
+# CSS/HTML for the ticker
     ticker_html = f"""
         <div style="background-color: #0e1117; padding: 10px; border-bottom: 1px solid #31333F;">
             <marquee behavior="scroll" direction="right" scrollamount="8">
