@@ -206,7 +206,7 @@ def main():
 import streamlit as st
 
     # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
-    st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
+        st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
     
         # Corrected TradingView News Widget
         tv_widget = """
