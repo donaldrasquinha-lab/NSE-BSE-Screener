@@ -145,19 +145,28 @@ from streamlit_autorefresh import st_autorefresh
 # 1. Page Config
 st.set_page_config(page_title="NSE-BSE Screener", layout="wide")
 
-def display_vertical_news_ticker():
-    st_autorefresh(interval=60 * 1000, key="news_pulse")
+# This CSS removes the default padding at the top of every Streamlit page
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 0rem !important;
+            padding-bottom: 0rem !important;
+        }
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+    </style>
+""", unsafe_allow_html=True)
 
+def display_vertical_news_ticker():
     financial_news = [
         "🇮🇳 Sensex crashes 582 points to close at 76,913; Nifty 50 ends below 24,000 mark.",
         "🇮🇳 Rupee hits record intraday low of 95.34 against USD amid oil surge.",
-        "🌍 Brent Crude jumps to $126/barrel as geopolitical tensions escalate.",
-        "🌍 US Fed holds rates steady; Jerome Powell signals hawkish stance.",
-        "🇮🇳 India's GDP forecast revised to 7.2% for FY27 by World Bank."
+        "🌍 Brent Crude jumps to $126/barrel as geopolitical tensions escalate."
     ]
 
-    # Join news with a wrapper for animation
     news_html = "".join([f'<div class="news-item">{item}</div>' for item in financial_news])
+
     # Ticker CSS with "absolute" positioning to hug the top
     ticker_css = f"""
     <style>
@@ -204,7 +213,6 @@ def display_vertical_news_ticker():
     st.markdown(ticker_css, unsafe_allow_html=True)
 
 display_vertical_news_ticker()
-
 # ===========================================================================
 #  MAIN APP LAYOUT
 # ===========================================================================
