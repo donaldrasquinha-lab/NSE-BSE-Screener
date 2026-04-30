@@ -139,35 +139,44 @@ import streamlit as st
 # FIX: Initialize session state at the top level, before main()
 if 'scanned_d' not in st.session_state:
     st.session_state['scanned_d'] = None 
+import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
-def main():
-    # Your existing main() logic...
-    if st.session_state['scanned_d'] is not None:
-        st.write("Data is ready!")
+# 1. Page Config MUST be the first Streamlit command
+st.set_page_config(page_title="NSE-BSE Screener", layout="wide")
 
+# 2. News Ticker at the very top
+def display_news_ticker():
+    # Auto-refresh every 1 minute
     st_autorefresh(interval=60 * 1000, key="news_pulse")
 
-# --- NEWS TICKER SETUP ---
     financial_news = [
-            "🇮🇳 Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
-            "🇮🇳 Rupee hits record low of 95.20 against USD as tensions rise.",
-            "🌍 Brent Crude hits $126/barrel following US-Iran naval threats.",
-            "🌍 US Fed holds rates at 3.5–3.75% in Powell's final meeting."
-        ]
+        "🇮🇳 Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
+        "🇮🇳 Rupee hits record low of 95.20 against USD as tensions rise.",
+        "🌍 Brent Crude hits $126/barrel following US-Iran naval threats.",
+        "🌍 US Fed holds rates at 3.5–3.75% in Powell's final meeting."
+    ]
     ticker_text = " • ".join(financial_news)
         
-# CSS/HTML for the ticker
     ticker_html = f"""
-        <div style="background-color: #0e1117; padding: 10px; border-bottom: 1px solid #31333F;">
-            <marquee behavior="scroll" direction="right" scrollamount="8">
-                <span style="color: #ff4b4b; font-family: monospace; font-size: 1rem;">
+        <div style="background-color: #0e1117; padding: 10px; border-bottom: 1px solid #31333F; margin-bottom: 20px;">
+            <marquee behavior="scroll" direction="left" scrollamount="8">
+                <span style="color: #ff4b4b; font-family: monospace; font-size: 1rem; font-weight: bold;">
                     {ticker_text}
                 </span>
             </marquee>
         </div>
         """
-        
     st.markdown(ticker_html, unsafe_allow_html=True)
+
+# Run ticker
+display_news_ticker()
+def main():
+    # Your existing main() logic...
+    if st.session_state['scanned_d'] is not None:
+        st.write("Data is ready!")
+
+   
 # ===========================================================================
 #  MAIN APP LAYOUT
 # ===========================================================================
