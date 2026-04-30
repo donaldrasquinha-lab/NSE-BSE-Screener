@@ -143,9 +143,9 @@ def main():
 
     st.markdown("<div class='hdr'><h1>NSE + BSE Multibagger Screener</h1></div>", unsafe_allow_html=True)
     
-    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap, tab_market = st.tabs(["🌐 Market Plus","Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub", "🗺️ Sector Heatmap"])
+    tab_market, tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["🌐 Market Plus","Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub", "🗺️ Sector Heatmap"])
 
-    # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
+    # --- 🌐 TAB 1: MARKET PLUS DASHBOARD ---
     with tab_market:
         # 🟢 AUTO-REFRESH: Triggers a script rerun every 60 seconds
         st_autorefresh(interval=60 * 1000, key="market_sync")
