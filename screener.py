@@ -308,7 +308,7 @@ def main():
             st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
 # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
-   with tab_market:
+    with tab_market:
          # 🟢 Auto-refresh every 60 seconds
         st_autorefresh(interval=60 * 1000, key="market_refresh")
         
