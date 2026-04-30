@@ -203,54 +203,48 @@ def main():
 
     st_autorefresh(interval=60 * 1000, key="news_pulse")
 
-                      # 🟢 MULTI-SOURCE LIVE NEWS ENGINE (High Availability)
-    st.markdown("<div class='slbl'>📰 Live Market Pulse</div>", unsafe_allow_html=True)
+                        # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
+    st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
     
-    import xml.etree.ElementTree as ET
-    import requests
-
-    def get_market_news():
-        # High-Availability RSS sources for 2026
-        sources = [
-            {"name": "Economic Times", "url": "https://indiatimes.com"},
-            {"name": "MoneyControl", "url": "https://moneycontrol.com"},
-            {"name": "Business Standard", "url": "https://business-standard.com"}
-        ]
-        
-        news_output = []
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0"}
-
-        for src in sources:
-            try:
-                response = requests.get(src['url'], headers=headers, timeout=5)
-                if response.status_code == 200:
-                    root = ET.fromstring(response.content)
-                    for item in root.findall('.//item')[:3]: # Grab top 3 from each
-                        news_output.append({
-                            "title": item.find('title').text,
-                            "link": item.find('link').text,
-                            "source": src['name']
-                        })
-                if len(news_output) >= 5: break # Cap total headlines at 5
-            except:
-                continue
-        return news_output
-
-    # Rendering logic
-    headlines = get_market_news()
+    # We use an IFrame to load a professional market ticker. 
+    # This bypasses all server-side blocks because YOUR browser loads it.
+    news_widget_html = """
+    <div style="height:500px; overflow:hidden; border-radius:10px; border:1px solid #1e2740;">
+        <iframe 
+            src="https://moneycontrol.com" 
+            width="100%" 
+            height="600" 
+            style="border:none; margin-top:-100px;" 
+            sandbox="allow-scripts allow-same-origin">
+        </iframe>
+    </div>
+    """
     
-    if headlines:
-        for news in headlines:
-            with st.container(border=True):
-                # UI clean-up: Remove trailing HTML characters if any
-                clean_title = news['title'].replace("<![CDATA[", "").replace("]]>", "").strip()
-                st.markdown(f"**{clean_title}**")
-                st.caption(f"Source: {news['source']}")
-                st.markdown(f"[Read Article]({news['link']})")
-    else:
-        # Final visual fallback if the entire internet firewall blocks the server
-        st.error("Live feed connection reset. Re-syncing via satellite backup...")
-        st.info("💡 Quick Access: [MoneyControl Live](https://moneycontrol.com)")
+    # Alternative: A cleaner, smaller TradingView News Widget
+    tv_widget = """
+    <div class="tradingview-widget-container">
+      <div class="tradingview-widget-container__widget"></div>
+      <script type="text/javascript" src="https://tradingview.com" async>
+      {
+      "feedMode": "market",
+      "market": "stock",
+      "is720": true,
+      "colorTheme": "dark",
+      "displayMode": "regular",
+      "width": "100%",
+      "height": "500",
+      "locale": "in",
+      "customer": "nse"
+    }
+      </script>
+    </div>
+    """
+
+    # Choose one: Direct MoneyControl IFrame OR TradingView Widget
+    # The TradingView widget is usually cleaner for dashboards.
+    st.components.v1.html(tv_widget, height=520)
+    
+    st.info("💡 Data provided by TradingView Real-Time Feed")
 
             
     with tab_screener:
