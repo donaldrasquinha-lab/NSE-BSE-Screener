@@ -145,7 +145,7 @@ def main():
     if st.session_state['scanned_d'] is not None:
         st.write("Data is ready!")
 
-    st_autorefresh(interval=60 * 1000, key="news_pulse")
+st_autorefresh(interval=60 * 1000, key="news_pulse")
 
     # --- NEWS TICKER SETUP ---
     financial_news = [
