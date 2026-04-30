@@ -203,9 +203,7 @@ def main():
 
         st_autorefresh(interval=60 * 1000, key="news_pulse")
 
-        import streamlit as st
-        import streamlit.components.v1 as components
-        
+       
         # Ensure this block is aligned with your main code (no extra spaces at start)
         st.markdown("### 📰 Indian Market Real-Time News")
         
