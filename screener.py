@@ -134,73 +134,34 @@ def get_market_metric(ticker_symbol):
         pass
     return 0.0, 0.0
 
-import streamlit as st
 import feedparser
 import requests
-from streamlit_autorefresh import st_autorefresh
+import streamlit as st
 
-# 1. ALWAYS FIRST: Page Configuration
-st.set_page_config(page_title="Market Screener", layout="wide")
-
-# 2. News Fetcher Logic
-def get_live_news():
-    # Primary Yahoo Finance Global RSS
-    rss_url = "https://yahoo.com"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+def get_live_market_news():
+    # RSS feeds for Global Finance and India Markets
+    rss_sources = [
+        "https://google.com",
+        "https://google.com"
+    ]
     
-    try:
-        response = requests.get(rss_url, headers=headers, timeout=10)
-        feed = feedparser.parse(response.content)
-        headlines = [entry.title for entry in feed.entries[:10]]
-    except:
-        headlines = ["Sensex drops 583 points to 76,913; Nifty settles at 23,997.", 
-                     "Rupee hits record intraday low of 95.34 vs USD.",
-                     "Brent Crude surges to $126/barrel amid US-Iran tensions."]
-    return headlines
+    all_headlines = []
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-# 3. UI Function: Vertical Animation
-def display_market_ticker():
-    # Refresh news every 5 minutes
-    st_autorefresh(interval=5 * 60 * 1000, key="market_pulse")
-    
-    headlines = get_live_news()
-    news_html = "".join([f'<div class="ticker-item">{h}</div>' for h in headlines])
-    
-    ticker_css = f"""
-    <style>
-        .ticker-wrapper {{
-            background: #0e1117;
-            height: 45px;
-            overflow: hidden;
-            border-bottom: 2px solid #ff4b4b;
-            position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
-        }}
-        .ticker-container {{
-            animation: slideUp {len(headlines) * 4}s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-        }}
-        .ticker-item {{
-            height: 45px;
-            display: flex; align-items: center; justify-content: center;
-            color: #ffffff; font-family: sans-serif; font-size: 1.1rem;
-        }}
-        @keyframes slideUp {{
-            {" ".join([f"{(100/len(headlines))*i}% {{ transform: translateY(-{i*45}px); }}" for i in range(len(headlines))])}
-            100% {{ transform: translateY(-{len(headlines)*45}px); }}
-        }}
-        .main-app {{ margin-top: 60px; }}
-    </style>
-    <div class="ticker-wrapper">
-        <div class="ticker-container">
-            {news_html}
-            <div class="ticker-item">{headlines[0] if headlines else ""}</div>
-        </div>
-    </div>
-    <div class="main-app"></div>
-    """
-    st.markdown(ticker_css, unsafe_allow_html=True)
+    for url in rss_sources:
+        try:
+            # Use requests with a timeout to catch connection issues quickly
+            response = requests.get(url, headers=headers, timeout=5)
+            feed = feedparser.parse(response.content)
+            if feed.entries:
+                # Take top 5 from each source
+                all_headlines.extend([entry.title for entry in feed.entries[:5]])
+        except Exception:
+            # Silently continue to try the next URL
+            continue
 
-# Launch the ticker
-display_market_ticker()
+    # Return only live headlines or the specific error message (no fallback data)
+    return all_headlines if all_headlines else ["❌ cannot connect to news"]
 
 # ===========================================================================
 #  MAIN APP LAYOUT
