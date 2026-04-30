@@ -137,12 +137,12 @@ def get_market_metric(ticker_symbol):
 import streamlit as st
 
 # FIX: Initialize session state at the top level, before main()
-if 'scanned_df' not in st.session_state:
-    st.session_state['scanned_df'] = None 
+if 'scanned_d' not in st.session_state:
+    st.session_state['scanned_d'] = None 
 
 def main():
     # Your existing main() logic...
-    if st.session_state['scanned_df'] is not None:
+    if st.session_state['scanned_d'] is not None:
         st.write("Data is ready!")
 # ===========================================================================
 #  MAIN APP LAYOUT
