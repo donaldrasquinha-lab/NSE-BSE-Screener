@@ -134,34 +134,69 @@ def get_market_metric(ticker_symbol):
         pass
     return 0.0, 0.0
 
+import streamlit as st
 import feedparser
 import requests
-import streamlit as st
 
 def get_live_market_news():
-    # RSS feeds for Global Finance and India Markets
+    # Feeds for Global Finance and India Markets
     rss_sources = [
         "https://google.com",
         "https://google.com"
     ]
-    
     all_headlines = []
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-
+    headers = {'User-Agent': 'Mozilla/5.0'}
     for url in rss_sources:
         try:
-            # Use requests with a timeout to catch connection issues quickly
             response = requests.get(url, headers=headers, timeout=5)
             feed = feedparser.parse(response.content)
             if feed.entries:
-                # Take top 5 from each source
                 all_headlines.extend([entry.title for entry in feed.entries[:5]])
-        except Exception:
-            # Silently continue to try the next URL
+        except:
             continue
-
-    # Return only live headlines or the specific error message (no fallback data)
     return all_headlines if all_headlines else ["❌ cannot connect to news"]
+
+# --- UI DISPLAY CODE ---
+headlines = get_live_market_news()
+news_html = "".join([f'<div class="ticker-item">{h}</div>' for h in headlines])
+
+# CSS specifically tuned for your dark theme
+ticker_css = f"""
+<style>
+    .custom-ticker-box {{
+        background: #1e2130; /* Matches your card background */
+        height: 50px;
+        overflow: hidden;
+        border: 1px solid #3d4156;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }}
+    .ticker-content {{
+        animation: flipUp {len(headlines) * 4}s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    }}
+    .ticker-item {{
+        height: 50px;
+        display: flex;
+        align-items: center;
+        padding-left: 20px;
+        color: #00d4ff; /* Cyan color to match your icons */
+        font-family: 'Inter', sans-serif;
+        font-size: 0.95rem;
+    }}
+    @keyframes flipUp {{
+        {" ".join([f"{(100/len(headlines))*i}% {{ transform: translateY(-{i*50}px); }}" for i in range(len(headlines))])}
+        100% {{ transform: translateY(-{len(headlines)*50}px); }}
+    }}
+</style>
+<div class="custom-ticker-box">
+    <div class="ticker-content">
+        {news_html}
+    </div>
+</div>
+"""
+
+# Place this immediately after st.set_page_config()
+st.markdown(ticker_css, unsafe_allow_html=True)
 
 # ===========================================================================
 #  MAIN APP LAYOUT
