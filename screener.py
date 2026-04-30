@@ -144,6 +144,30 @@ def main():
     # Your existing main() logic...
     if st.session_state['scanned_d'] is not None:
         st.write("Data is ready!")
+
+st_autorefresh(interval=60 * 1000, key="news_pulse")
+
+                # --- NEWS TICKER SETUP ---
+        financial_news = [
+            "🇮🇳 Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
+            "🇮🇳 Rupee hits record low of 95.20 against USD as tensions rise.",
+            "🌍 Brent Crude hits $126/barrel following US-Iran naval threats.",
+            "🌍 US Fed holds rates at 3.5–3.75% in Powell's final meeting."
+        ]
+        ticker_text = " • ".join(financial_news)
+        
+        # CSS/HTML for the ticker
+        ticker_html = f"""
+        <div style="background-color: #0e1117; padding: 10px; border-bottom: 1px solid #31333F;">
+            <marquee behavior="scroll" direction="right" scrollamount="8">
+                <span style="color: #ff4b4b; font-family: monospace; font-size: 1rem;">
+                    {ticker_text}
+                </span>
+            </marquee>
+        </div>
+        """
+        
+        st.markdown(ticker_html, unsafe_allow_html=True)
 # ===========================================================================
 #  MAIN APP LAYOUT
 # ===========================================================================
@@ -214,29 +238,7 @@ def main():
         i4.metric("Fin Nifty", f"{fin_p}", f"{fin_c}%")
         i5.metric("Sensex", f"{sen_p}", f"{sen_c}%")
 
-        st_autorefresh(interval=60 * 1000, key="news_pulse")
-
-                # --- NEWS TICKER SETUP ---
-        financial_news = [
-            "🇮🇳 Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
-            "🇮🇳 Rupee hits record low of 95.20 against USD as tensions rise.",
-            "🌍 Brent Crude hits $126/barrel following US-Iran naval threats.",
-            "🌍 US Fed holds rates at 3.5–3.75% in Powell's final meeting."
-        ]
-        ticker_text = " • ".join(financial_news)
         
-        # CSS/HTML for the ticker
-        ticker_html = f"""
-        <div style="background-color: #0e1117; padding: 10px; border-bottom: 1px solid #31333F;">
-            <marquee behavior="scroll" direction="right" scrollamount="8">
-                <span style="color: #ff4b4b; font-family: monospace; font-size: 1rem;">
-                    {ticker_text}
-                </span>
-            </marquee>
-        </div>
-        """
-        
-        st.markdown(ticker_html, unsafe_allow_html=True)
 
             
     with tab_screener:
