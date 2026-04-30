@@ -204,10 +204,10 @@ def main():
     st_autorefresh(interval=60 * 1000, key="news_pulse")
 
     # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
-        st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
+    st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
     
-        # Corrected TradingView News Widget
-        tv_widget = """
+    # Corrected TradingView News Widget
+    tv_widget = """
         <div class="tradingview-widget-container">
           <div class="tradingview-widget-container__widget"></div>
           <script type="text/javascript" src="https://tradingview.com" async>
