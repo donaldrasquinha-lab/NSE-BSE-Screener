@@ -144,7 +144,17 @@ from streamlit_autorefresh import st_autorefresh
 
 # 1. Page Config
 st.set_page_config(page_title="NSE-BSE Screener", layout="wide")
-
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 0rem !important;
+            padding-bottom: 0rem !important;
+        }
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+    </style>
+""", unsafe_allow_html=True)
 def display_vertical_news_ticker():
     st_autorefresh(interval=60 * 1000, key="news_pulse")
 
