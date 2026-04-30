@@ -19,6 +19,18 @@ import yfinance as yf
 import plotly.graph_objects as go
 
 from streamlit_autorefresh import st_autorefresh
+
+import streamlit as st
+
+# FIX: Initialize session state at the top level, before main()
+if 'scanned_df' not in st.session_state:
+    st.session_state['scanned_df'] = None 
+
+def main():
+    # Your existing main() logic...
+    if st.session_state['scanned_df'] is not None:
+        st.write("Data is ready!")
+
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
@@ -203,35 +215,27 @@ def main():
 
         st_autorefresh(interval=60 * 1000, key="news_pulse")
 
-        import streamlit as st
-        
-        # Verified news items for April 30, 2026
-        news_data = [
-            "🇮🇳 INDIAN NEWS: Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
-            "🇮🇳 INDIAN NEWS: Rupee hits record low of 95.20 against US Dollar as geopolitical tensions rise.",
-            "🇮🇳 INDIAN NEWS: India's GDP growth forecast (7-7.4%) clouded by West Asia conflict, says Finance Ministry.",
-            "🌍 GLOBAL NEWS: Brent Crude hits $126 per barrel following US-Iran naval blockade threats.",
-            "🌍 GLOBAL NEWS: US Fed holds rates at 3.5–3.75% in Jerome Powell's final term meeting.",
-            "🌍 GLOBAL NEWS: UAE officially exits OPEC, creating a major shift in global energy markets.",
-            "🌍 GLOBAL NEWS: Big Tech Spending: Microsoft and Alphabet announce massive AI capital investments."
+                # --- NEWS TICKER SETUP ---
+        financial_news = [
+            "🇮🇳 Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
+            "🇮🇳 Rupee hits record low of 95.20 against USD as tensions rise.",
+            "🌍 Brent Crude hits $126/barrel following US-Iran naval threats.",
+            "🌍 US Fed holds rates at 3.5–3.75% in Powell's final meeting."
         ]
+        ticker_text = " • ".join(financial_news)
         
-        # Combine news for the ticker
-        ticker_text = " • ".join(news_data)
+        # CSS/HTML for the ticker
+        ticker_html = f"""
+        <div style="background-color: #0e1117; padding: 10px; border-bottom: 1px solid #31333F;">
+            <marquee behavior="scroll" direction="right" scrollamount="8">
+                <span style="color: #ff4b4b; font-family: monospace; font-size: 1rem;">
+                    {ticker_text}
+                </span>
+            </marquee>
+        </div>
+        """
         
-        # News Ticker UI
-        st.markdown(
-            f"""
-            <div style="background-color: #0e1117; padding: 12px; border-top: 2px solid #ff4b4b; border-bottom: 2px solid #ff4b4b; overflow: hidden;">
-                <marquee behavior="scroll" direction="right" scrollamount="7">
-                    <span style="color: #ffffff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 1.15rem; font-weight: 500;">
-                        {ticker_text}
-                    </span>
-                </marquee>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        st.markdown(ticker_html, unsafe_allow_html=True)
 
             
     with tab_screener:
