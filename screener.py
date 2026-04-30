@@ -201,7 +201,7 @@ def main():
         i4.metric("Fin Nifty", f"{fin_p}", f"{fin_c}%")
         i5.metric("Sensex", f"{sen_p}", f"{sen_c}%")
 
-    st_autorefresh(interval=60 * 1000, key="news_pulse")
+        st_autorefresh(interval=60 * 1000, key="news_pulse")
 
         # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
         st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
