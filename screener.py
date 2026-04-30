@@ -199,14 +199,24 @@ def display_vertical_news_ticker():
             {" ".join([f"{(100/len(financial_news))*i}% {{ transform: translateY(-{i*40}px); }}" for i in range(len(financial_news))])}
             100% {{ transform: translateY(-{len(financial_news)*40}px); }}
         }}
-        
+          /* Add margin to your main app content so it doesn't hide under the ticker */
+        .main-content-padding {{
+            margin-top: 50px;
+        }}
+    </style>
+    <div class="top-ticker-wrapper">
+        <div class="news-container">
+            {news_html}
+            <div class="news-item">{financial_news[0]}</div>
+        </div>
+    </div>
+    <div class="main-content-padding"></div>
+    """
+    st.markdown(ticker_css, unsafe_allow_html=True)
     """
     st.markdown(ticker_css, unsafe_allow_html=True)
 
 display_vertical_news_ticker()
-
-st.title("My App Content")
-st.write("Now the content starts right below the ticker.")
 
 # ===========================================================================
 #  MAIN APP LAYOUT
