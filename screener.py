@@ -135,39 +135,28 @@ def get_market_metric(ticker_symbol):
     return 0.0, 0.0
 
 import streamlit as st
-
-# FIX: Initialize session state at the top level, before main()
-if 'scanned_d' not in st.session_state:
-    st.session_state['scanned_d'] = None 
-import streamlit as st
+import feedparser
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Page Config
-st.set_page_config(page_title="NSE-BSE Screener", layout="wide")
+def get_live_news():
+    # You can swap these URLs for any financial RSS feed
+    rss_url = "https://indiatimes.com"
+    feed = feedparser.parse(rss_url)
+    
+    # Extract titles and join them
+    headlines = [item.title for item in feed.entries[:10]] # Get top 10
+    if not headlines:
+        return ["Waiting for live news updates..."]
+    return headlines
 
-# This CSS removes the default padding at the top of every Streamlit page
-st.markdown("""
-    <style>
-        .block-container {
-            padding-top: 0rem !important;
-            padding-bottom: 0rem !important;
-        }
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
-    </style>
-""", unsafe_allow_html=True)
+def display_live_vertical_ticker():
+    # Auto-refresh every 5 minutes to fetch new news
+    st_autorefresh(interval=5 * 60 * 1000, key="live_news_pulse")
 
-def display_vertical_news_ticker():
-    financial_news = [
-        "🇮🇳 Sensex crashes 582 points to close at 76,913; Nifty 50 ends below 24,000 mark.",
-        "🇮🇳 Rupee hits record intraday low of 95.34 against USD amid oil surge.",
-        "🌍 Brent Crude jumps to $126/barrel as geopolitical tensions escalate."
-    ]
+    # Fetch live data
+    live_news = get_live_news()
+    news_html = "".join([f'<div class="news-item">{item}</div>' for item in live_news])
 
-    news_html = "".join([f'<div class="news-item">{item}</div>' for item in financial_news])
-
-    # Ticker CSS with "absolute" positioning to hug the top
     ticker_css = f"""
     <style>
         .top-ticker-wrapper {{
@@ -175,14 +164,14 @@ def display_vertical_news_ticker():
             height: 40px;
             width: 100%;
             overflow: hidden;
-            border-bottom: 1px solid #ff4b4b;
-            position: fixed; /* Fixes it to the top of the browser window */
+            border-bottom: 2px solid #ff4b4b;
+            position: fixed;
             top: 0;
             left: 0;
             z-index: 1000;
         }}
         .news-container {{
-            animation: slideUp {len(financial_news) * 4}s cubic-bezier(0.645, 0.045, 0.355, 1) infinite;
+            animation: slideUp {len(live_news) * 4}s cubic-bezier(0.645, 0.045, 0.355, 1) infinite;
         }}
         .news-item {{
             height: 40px;
@@ -191,28 +180,27 @@ def display_vertical_news_ticker():
             justify-content: center;
             color: #ffffff;
             font-family: sans-serif;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            text-align: center;
         }}
         @keyframes slideUp {{
-            {" ".join([f"{(100/len(financial_news))*i}% {{ transform: translateY(-{i*40}px); }}" for i in range(len(financial_news))])}
-            100% {{ transform: translateY(-{len(financial_news)*40}px); }}
-        }}
-        /* Add margin to your main app content so it doesn't hide under the ticker */
-        .main-content-padding {{
-            margin-top: 50px;
+            {" ".join([f"{(100/len(live_news))*i}% {{ transform: translateY(-{i*40}px); }}" for i in range(len(live_news))])}
+            100% {{ transform: translateY(-{len(live_news)*40}px); }}
         }}
     </style>
     <div class="top-ticker-wrapper">
         <div class="news-container">
             {news_html}
-            <div class="news-item">{financial_news[0]}</div>
+            <div class="news-item">{live_news[0] if live_news else ""}</div>
         </div>
     </div>
-    <div class="main-content-padding"></div>
+    <div style="margin-top: 50px;"></div>
     """
     st.markdown(ticker_css, unsafe_allow_html=True)
 
-display_vertical_news_ticker()
+# Call this at the start of your app
+display_live_vertical_ticker()
 # ===========================================================================
 #  MAIN APP LAYOUT
 # ===========================================================================
