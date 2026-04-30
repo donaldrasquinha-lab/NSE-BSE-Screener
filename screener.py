@@ -201,40 +201,44 @@ def main():
         i4.metric("Fin Nifty", f"{fin_p}", f"{fin_c}%")
         i5.metric("Sensex", f"{sen_p}", f"{sen_c}%")
         
-          # 🟢 BULLETPROOF NEWS FEED (Tab 6)
-    st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
-    
-    # Show last sync time to confirm auto-refresh is active
-    st.caption(f"Last Sync: {pd.Timestamp.now().strftime('%H:%M:%S')}")
+              # 🟢 TICKER NEWS ENGINE (Tab 6)
+    st.markdown("<div class='slbl'>📰 Live Ticker Headlines</div>", unsafe_allow_html=True)
     
     try:
-        # Use a high-volume ticker and a broader market query
-        # Fallback: Scrape official RSS feed if API is empty
-        news_source = yf.Ticker("RELIANCE.NS")
-        raw_news = news_source.news
+        # Puts the latest news for Nifty 50 Index (Broad Market Context)
+        ticker_obj = yf.Ticker("^NSEI")
+        raw_news_list = ticker_obj.news
         
-        if not raw_news or len(raw_news) == 0:
-            # Secondary try using Nifty 50 Index
-            raw_news = yf.Ticker("^NSEI").news
-            
-        if raw_news and len(raw_news) > 0:
-            for item in raw_news[:5]:
+        # Verify if list is actually populated
+        if isinstance(raw_news_list, list) and len(raw_news_list) > 0:
+            for item in raw_news_list[:5]:
+                # Extracting keys with fallbacks for newer API versions
+                title = item.get('title') or item.get('headline') or "Market Update"
+                source = item.get('publisher') or item.get('source') or "Financial Feed"
+                link = item.get('link') or item.get('url') or "#"
+                
+                # Check for timestamp if available
+                ts = item.get('providerPublishTime')
+                time_str = f" | {pd.to_datetime(ts, unit='s').strftime('%H:%M')}" if ts else ""
+
                 with st.container(border=True):
-                    # Some items use 'title', others 'text' depending on API version
-                    title = item.get('title', 'Market Update')
-                    publisher = item.get('publisher', 'Finance Feed')
-                    link = item.get('link', '#')
-                    
                     st.markdown(f"**{title}**")
-                    st.caption(f"Source: {publisher}")
-                    st.markdown(f"[Read Article]({link})")
+                    st.caption(f"Source: {source}{time_str}")
+                    if link != "#":
+                        st.markdown(f"[Read Article]({link})")
         else:
-            # 🔴 ULTIMATE FALLBACK: Direct link if both APIs fail
-            st.info("News API is currently throttled by the provider.")
-            st.markdown("[Click here for Live NSE News (Google News)](https://google.com)")
-            
+            # If API returns an empty list, try a high-volume constituent as fallback
+            reliance_news = yf.Ticker("RELIANCE.NS").news
+            if reliance_news:
+                for item in reliance_news[:3]:
+                    st.markdown(f"📌 **{item.get('title')}**")
+                    st.caption(f"Source: {item.get('publisher')}")
+            else:
+                st.info("News feed is temporarily empty. Updates will appear shortly.")
+                
     except Exception as e:
-        st.info("News feed is syncing with the exchange...")
+        st.warning("Headlines are currently being synchronized by the provider.")
+
 
             
     with tab_screener:
