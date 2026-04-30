@@ -363,7 +363,7 @@ def main():
         col10.metric("Sensex", f"{m_sen}", f"{c_sen}%")
         
         # 🟢 NEW: Fixed News Section (Using direct RSS fallback if yfinance.news is empty)
-            st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
+        st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
     try:
         # Reliance is the most reliable news feed proxy for India
         news_ticker = yf.Ticker("RELIANCE.NS")
