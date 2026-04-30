@@ -133,98 +133,35 @@ def get_market_metric(ticker_symbol):
     except:
         pass
     return 0.0, 0.0
-
-import streamlit as st
-import feedparser
-from streamlit_autorefresh import st_autorefresh
-
-def get_live_news():
-    # You can swap these URLs for any financial RSS feed
-    rss_url = "https://indiatimes.com"
-    feed = feedparser.parse(rss_url)
-    
-    # Extract titles and join them
-    headlines = [item.title for item in feed.entries[:10]] # Get top 10
-    if not headlines:
-        return ["Waiting for live news updates..."]
-    return headlines
-
-def display_live_vertical_ticker():
-    # Auto-refresh every 5 minutes to fetch new news
-    st_autorefresh(interval=5 * 60 * 1000, key="live_news_pulse")
-
 import feedparser
 import requests
+import streamlit as st
 
-def get_live_news():
-    # Use a backup feed if the first one fails
-    rss_urls = [
-        "https://indiatimes.com",
+def get_yahoo_global_news():
+    # Primary: Yahoo Finance Stock Market | Secondary: Google News Global Markets
+    urls = [
+        "https://yahoo.com",
         "https://google.com"
     ]
     
     headlines = []
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-    for url in rss_urls:
+    for url in urls:
         try:
-            # Fetch content with a browser-like header to avoid blocks
+            # Using browser headers is critical for Yahoo feeds to load
             response = requests.get(url, headers=headers, timeout=10)
             feed = feedparser.parse(response.content)
             
             if feed.entries:
-                headlines = [item.title for item in feed.entries[:10]]
-                break # Exit if we successfully get news
-        except Exception as e:
-            continue # Try the next URL if this one fails
+                # Extract top 10 titles and clean up any HTML entities
+                headlines = [entry.title.replace('&#39;', "'").replace('&amp;', '&') for entry in feed.entries[:10]]
+                break
+        except Exception:
+            continue
 
-    return headlines if headlines else ["No live news found. Checking connection..."]
+    return headlines if headlines else ["Connecting to Yahoo Global News..."]
 
-
-    ticker_css = f"""
-    <style>
-        .top-ticker-wrapper {{
-            background: #0e1117;
-            height: 40px;
-            width: 100%;
-            overflow: hidden;
-            border-bottom: 2px solid #ff4b4b;
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: 1000;
-        }}
-        .news-container {{
-            animation: slideUp {len(live_news) * 4}s cubic-bezier(0.645, 0.045, 0.355, 1) infinite;
-        }}
-        .news-item {{
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #ffffff;
-            font-family: sans-serif;
-            font-size: 0.95rem;
-            font-weight: 500;
-            text-align: center;
-        }}
-        @keyframes slideUp {{
-            {" ".join([f"{(100/len(live_news))*i}% {{ transform: translateY(-{i*40}px); }}" for i in range(len(live_news))])}
-            100% {{ transform: translateY(-{len(live_news)*40}px); }}
-        }}
-    </style>
-    <div class="top-ticker-wrapper">
-        <div class="news-container">
-            {news_html}
-            <div class="news-item">{live_news[0] if live_news else ""}</div>
-        </div>
-    </div>
-    <div style="margin-top: 50px;"></div>
-    """
-    st.markdown(ticker_css, unsafe_allow_html=True)
-
-# Call this at the start of your app
-display_live_vertical_ticker()
 # ===========================================================================
 #  MAIN APP LAYOUT
 # ===========================================================================
