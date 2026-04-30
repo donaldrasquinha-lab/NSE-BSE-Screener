@@ -20,16 +20,7 @@ import plotly.graph_objects as go
 
 from streamlit_autorefresh import st_autorefresh
 
-import streamlit as st
 
-# FIX: Initialize session state at the top level, before main()
-if 'scanned_df' not in st.session_state:
-    st.session_state['scanned_df'] = None 
-
-def main():
-    # Your existing main() logic...
-    if st.session_state['scanned_df'] is not None:
-        st.write("Data is ready!")
 
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
@@ -143,6 +134,16 @@ def get_market_metric(ticker_symbol):
         pass
     return 0.0, 0.0
 
+import streamlit as st
+
+# FIX: Initialize session state at the top level, before main()
+if 'scanned_df' not in st.session_state:
+    st.session_state['scanned_df'] = None 
+
+def main():
+    # Your existing main() logic...
+    if st.session_state['scanned_df'] is not None:
+        st.write("Data is ready!")
 # ===========================================================================
 #  MAIN APP LAYOUT
 # ===========================================================================
