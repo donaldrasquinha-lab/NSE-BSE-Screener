@@ -309,16 +309,16 @@ def main():
 
 # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
     with tab_market:
-        # 🟢 Auto-refresh every 60 seconds
+ # 🟢 Auto-refresh every 60 seconds
         st_autorefresh(interval=60 * 1000, key="market_refresh")
         
         st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
         
-        # Row 1: Global & Commodities
+ # Row 1: Global & Commodities
         st.subheader("Global Markets & Commodities")
         col1, col2, col3, col4, col5 = st.columns(5)
         
-        # Corrected Tickers: Gold(GC=F), Dow Fut(YM=F), Nasdaq(NQ=F), S&P(ES=F), BTC(BTC-USD)
+    # Corrected Tickers: Gold(GC=F), Dow Fut(YM=F), Nasdaq(NQ=F), S&P(ES=F), BTC(BTC-USD)
         m_gold, c_gold = get_market_metric("GC=F")
         m_dow, c_dow = get_market_metric("YM=F")
         m_nas, c_nas = get_market_metric("NQ=F")
