@@ -142,41 +142,65 @@ if 'scanned_d' not in st.session_state:
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Page Config MUST be the first Streamlit command
+# 1. Page Config
 st.set_page_config(page_title="NSE-BSE Screener", layout="wide")
 
-# 2. News Ticker at the very top
-def display_news_ticker():
-    # Auto-refresh every 1 minute
+def display_vertical_news_ticker():
     st_autorefresh(interval=60 * 1000, key="news_pulse")
 
     financial_news = [
-        "🇮🇳 Sensex crashes 1,110 points to 76,386; Nifty 50 slips 1.45% amid oil surge.",
-        "🇮🇳 Rupee hits record low of 95.20 against USD as tensions rise.",
-        "🌍 Brent Crude hits $126/barrel following US-Iran naval threats.",
-        "🌍 US Fed holds rates at 3.5–3.75% in Powell's final meeting."
+        "🇮🇳 Sensex crashes 582 points to close at 76,913; Nifty 50 ends below 24,000 mark.",
+        "🇮🇳 Rupee hits record intraday low of 95.34 against USD amid oil surge.",
+        "🌍 Brent Crude jumps to $126/barrel as geopolitical tensions escalate.",
+        "🌍 US Fed holds rates steady; Jerome Powell signals hawkish stance.",
+        "🇮🇳 India's GDP forecast revised to 7.2% for FY27 by World Bank."
     ]
-    ticker_text = " • ".join(financial_news)
-        
-    ticker_html = f"""
-        <div style="background-color: #0e1117; padding: 10px; border-bottom: 1px solid #31333F; margin-bottom: 20px;">
-            <marquee behavior="scroll" direction="right" scrollamount="8">
-                <span style="color: #ff4b4b; font-family: monospace; font-size: 1rem; font-weight: bold;">
-                    {ticker_text}
-                </span>
-            </marquee>
+
+    # Join news with a wrapper for animation
+    news_html = "".join([f'<div class="news-item">{item}</div>' for item in financial_news])
+
+    # CSS for Vertical Flip Animation
+    ticker_css = f"""
+    <style>
+        .ticker-wrapper {{
+            background: #0e1117;
+            height: 40px;
+            overflow: hidden;
+            border-bottom: 2px solid #ff4b4b;
+            margin-bottom: 20px;
+            position: relative;
+        }}
+        .news-container {{
+            animation: slideUp {len(financial_news) * 4}s cubic-bezier(0.645, 0.045, 0.355, 1) infinite;
+        }}
+        .news-item {{
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-weight: 500;
+            font-size: 1.1rem;
+            white-space: nowrap;
+        }}
+        @keyframes slideUp {{
+            {" ".join([f"{(100/len(financial_news))*i}% {{ transform: translateY(-{i*40}px); }}" for i in range(len(financial_news))])}
+            100% {{ transform: translateY(-{len(financial_news)*40}px); }}
+        }}
+    </style>
+    <div class="ticker-wrapper">
+        <div class="news-container">
+            {news_html}
+            <div class="news-item">{financial_news[0]}</div> <!-- Duplicate of first item for seamless loop -->
         </div>
-        """
-    st.markdown(ticker_html, unsafe_allow_html=True)
+    </div>
+    """
+    st.markdown(ticker_css, unsafe_allow_html=True)
 
-# Run ticker
-display_news_ticker()
-def main():
-    # Your existing main() logic...
-    if st.session_state['scanned_d'] is not None:
-        st.write("Data is ready!")
+# Run the vertical ticker
+display_vertical_news_ticker()
 
-   
 # ===========================================================================
 #  MAIN APP LAYOUT
 # ===========================================================================
