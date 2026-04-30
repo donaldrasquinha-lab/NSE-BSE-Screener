@@ -203,31 +203,35 @@ def main():
 
         st_autorefresh(interval=60 * 1000, key="news_pulse")
 
-        # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
-        st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
-    
-        # Corrected TradingView News Widget
-        tv_widget = """
-        <div class="tradingview-widget-container">
+        import streamlit as st
+        import streamlit.components.v1 as components
+        
+        # Ensure this block is aligned with your main code (no extra spaces at start)
+        st.markdown("### 📰 Indian Market Real-Time News")
+        
+        # TradingView News Timeline Widget
+        # Focused on "NSE" and "BSE" news via the 'in' locale
+        news_html = """
+        <div class="tradingview-widget-container" style="height: 500px;">
           <div class="tradingview-widget-container__widget"></div>
           <script type="text/javascript" src="https://tradingview.com" async>
           {
-          "feedMode": "all_symbols",
-          "isStandard": true,
-          "colorTheme": "dark",
-          "displayMode": "regular",
-          "width": "100%",
-          "height": 500,
-          "locale": "in"
-        }
+            "feedMode": "market",
+            "market": "stock",
+            "isTransparent": false,
+            "displayMode": "regular",
+            "width": "100%",
+            "height": "100%",
+            "colorTheme": "dark",
+            "locale": "in"
+          }
           </script>
         </div>
         """
         
-        # Render the widget
-        st.components.v1.html(tv_widget, height=520)
-        
-        st.info("💡 Data provided by TradingView Real-Time Feed")
+        # Render with enough height to prevent internal scrolling issues
+        components.html(news_html, height=520, scrolling=False)
+
 
             
     with tab_screener:
