@@ -153,9 +153,33 @@ def display_live_vertical_ticker():
     # Auto-refresh every 5 minutes to fetch new news
     st_autorefresh(interval=5 * 60 * 1000, key="live_news_pulse")
 
-    # Fetch live data
-    live_news = get_live_news()
-    news_html = "".join([f'<div class="news-item">{item}</div>' for item in live_news])
+import feedparser
+import requests
+
+def get_live_news():
+    # Use a backup feed if the first one fails
+    rss_urls = [
+        "https://indiatimes.com",
+        "https://google.com"
+    ]
+    
+    headlines = []
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+
+    for url in rss_urls:
+        try:
+            # Fetch content with a browser-like header to avoid blocks
+            response = requests.get(url, headers=headers, timeout=10)
+            feed = feedparser.parse(response.content)
+            
+            if feed.entries:
+                headlines = [item.title for item in feed.entries[:10]]
+                break # Exit if we successfully get news
+        except Exception as e:
+            continue # Try the next URL if this one fails
+
+    return headlines if headlines else ["No live news found. Checking connection..."]
+
 
     ticker_css = f"""
     <style>
