@@ -145,7 +145,80 @@ def main():
     
     tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap, tab_market = st.tabs(["🌐 Market Plus","Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub", "🗺️ Sector Heatmap"])
 
+    # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
+    with tab_market:
+        # 🟢 AUTO-REFRESH: Triggers a script rerun every 60 seconds
+        st_autorefresh(interval=60 * 1000, key="market_sync")
 
+        st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
+        
+        # Helper function for dynamic fallbacks
+        def get_market_data(ticker_list):
+            for ticker in ticker_list:
+                try:
+                    data = yf.Ticker(ticker).history(period="5d")
+                    if not data.empty and len(data) >= 2:
+                        price = data['Close'].iloc[-1]
+                        change = ((price - data['Close'].iloc[-2]) / data['Close'].iloc[-2]) * 100
+                        return round(price, 2), round(change, 2)
+                except: continue
+            return 0.0, 0.0
+
+        # Row 1: Global & Commodities
+        st.subheader("Global Markets & Commodities")
+        g1, g2, g3, g4, g5 = st.columns(5)
+        
+        # Data Fetches with Fallbacks
+        gold_p, gold_c = get_market_data(["GC=F", "GOLD"])
+        dow_p, dow_c   = get_market_data(["YM=F", "^DJI"])
+        nas_p, nas_c   = get_market_data(["NQ=F", "^IXIC"])
+        spx_p, spx_c   = get_market_data(["ES=F", "^GSPC"])
+        # 🟢 Fixed Bitcoin Ticker Chain
+        btc_p, btc_c   = get_market_data(["BTC-USD", "BTCUSD=X", "BTC-INR"])
+
+        g1.metric("Gold", f"${gold_p}", f"{gold_c}%")
+        g2.metric("Dow Jones Fut", f"{dow_p}", f"{dow_c}%")
+        g3.metric("Nasdaq 100", f"{nas_p}", f"{nas_c}%")
+        g4.metric("S&P 500", f"{spx_p}", f"{spx_c}%")
+        g5.metric("Bitcoin", f"${btc_p}", f"{btc_c}%")
+        
+        st.divider()
+        
+        # Row 2: Indian Indices
+        st.subheader("Indian Indices & GIFT Nifty")
+        i1, i2, i3, i4, i5 = st.columns(5)
+        
+        # 🟢 Fixed GIFT Nifty Ticker Chain
+        gift_p, gift_c = get_market_data(["IN=F", "GIFTNIFTY.NS", "^NSEI"])
+        n50_p, n50_c   = get_market_data(["^NSEI", "NIFTY50.NS"])
+        bnk_p, bnk_c   = get_market_data(["^NSEBANK", "BANKNIFTY.NS"])
+        fin_p, fin_c   = get_market_data(["NIFTY_FIN_SERVICE.NS", "FINNIFTY.NS"])
+        sen_p, sen_c   = get_market_data(["^BSESN", "SENSEX.BO"])
+
+        i1.metric("GIFT Nifty", f"{gift_p}", f"{gift_c}%")
+        i2.metric("Nifty 50", f"{n50_p}", f"{n50_c}%")
+        i3.metric("Bank Nifty", f"{bnk_p}", f"{bnk_c}%")
+        i4.metric("Fin Nifty", f"{fin_p}", f"{fin_c}%")
+        i5.metric("Sensex", f"{sen_p}", f"{sen_c}%")
+        
+        # 🟢 Bulletproof News Feed
+        st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
+        try:
+            # Using Reliance as a high-volume proxy for Indian market news
+            news_items = yf.Ticker("RELIANCE.NS").news
+            if not news_items:
+                news_items = yf.Ticker("^NSEI").news
+                
+            if news_items:
+                for item in news_items[:5]:
+                    with st.container(border=True):
+                        st.markdown(f"**{item['title']}**")
+                        st.caption(f"Source: {item['publisher']} | [Read Article]({item['link']})")
+            else:
+                st.info("News feed is temporarily syncing. Updates will appear on next refresh.")
+        except Exception:
+            st.info("News stream currently refreshing...")
+            
     with tab_screener:
         token_input = st.text_input("Enter Upstox Access Token (v2)", type="password")
         if token_input:
@@ -308,79 +381,7 @@ def main():
             st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
             st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
-    # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
-    with tab_market:
-        # 🟢 AUTO-REFRESH: Triggers a script rerun every 60 seconds
-        st_autorefresh(interval=60 * 1000, key="market_sync")
 
-        st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
-        
-        # Helper function for dynamic fallbacks
-        def get_market_data(ticker_list):
-            for ticker in ticker_list:
-                try:
-                    data = yf.Ticker(ticker).history(period="5d")
-                    if not data.empty and len(data) >= 2:
-                        price = data['Close'].iloc[-1]
-                        change = ((price - data['Close'].iloc[-2]) / data['Close'].iloc[-2]) * 100
-                        return round(price, 2), round(change, 2)
-                except: continue
-            return 0.0, 0.0
-
-        # Row 1: Global & Commodities
-        st.subheader("Global Markets & Commodities")
-        g1, g2, g3, g4, g5 = st.columns(5)
-        
-        # Data Fetches with Fallbacks
-        gold_p, gold_c = get_market_data(["GC=F", "GOLD"])
-        dow_p, dow_c   = get_market_data(["YM=F", "^DJI"])
-        nas_p, nas_c   = get_market_data(["NQ=F", "^IXIC"])
-        spx_p, spx_c   = get_market_data(["ES=F", "^GSPC"])
-        # 🟢 Fixed Bitcoin Ticker Chain
-        btc_p, btc_c   = get_market_data(["BTC-USD", "BTCUSD=X", "BTC-INR"])
-
-        g1.metric("Gold", f"${gold_p}", f"{gold_c}%")
-        g2.metric("Dow Jones Fut", f"{dow_p}", f"{dow_c}%")
-        g3.metric("Nasdaq 100", f"{nas_p}", f"{nas_c}%")
-        g4.metric("S&P 500", f"{spx_p}", f"{spx_c}%")
-        g5.metric("Bitcoin", f"${btc_p}", f"{btc_c}%")
-        
-        st.divider()
-        
-        # Row 2: Indian Indices
-        st.subheader("Indian Indices & GIFT Nifty")
-        i1, i2, i3, i4, i5 = st.columns(5)
-        
-        # 🟢 Fixed GIFT Nifty Ticker Chain
-        gift_p, gift_c = get_market_data(["IN=F", "GIFTNIFTY.NS", "^NSEI"])
-        n50_p, n50_c   = get_market_data(["^NSEI", "NIFTY50.NS"])
-        bnk_p, bnk_c   = get_market_data(["^NSEBANK", "BANKNIFTY.NS"])
-        fin_p, fin_c   = get_market_data(["NIFTY_FIN_SERVICE.NS", "FINNIFTY.NS"])
-        sen_p, sen_c   = get_market_data(["^BSESN", "SENSEX.BO"])
-
-        i1.metric("GIFT Nifty", f"{gift_p}", f"{gift_c}%")
-        i2.metric("Nifty 50", f"{n50_p}", f"{n50_c}%")
-        i3.metric("Bank Nifty", f"{bnk_p}", f"{bnk_c}%")
-        i4.metric("Fin Nifty", f"{fin_p}", f"{fin_c}%")
-        i5.metric("Sensex", f"{sen_p}", f"{sen_c}%")
-        
-        # 🟢 Bulletproof News Feed
-        st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
-        try:
-            # Using Reliance as a high-volume proxy for Indian market news
-            news_items = yf.Ticker("RELIANCE.NS").news
-            if not news_items:
-                news_items = yf.Ticker("^NSEI").news
-                
-            if news_items:
-                for item in news_items[:5]:
-                    with st.container(border=True):
-                        st.markdown(f"**{item['title']}**")
-                        st.caption(f"Source: {item['publisher']} | [Read Article]({item['link']})")
-            else:
-                st.info("News feed is temporarily syncing. Updates will appear on next refresh.")
-        except Exception:
-            st.info("News stream currently refreshing...")
 
 
 
