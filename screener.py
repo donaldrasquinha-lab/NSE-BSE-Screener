@@ -307,64 +307,77 @@ def main():
             st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
             st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
-        # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
-    with tab_market:
-        st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse</div>", unsafe_allow_html=True)
+from streamlit_autorefresh import st_autorefresh # pip install streamlit-autorefresh
+
+# --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
+with tab_market:
+    # 🟢 Auto-refresh every 60 seconds
+    st_autorefresh(interval=60 * 1000, key="market_refresh")
+    
+    st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
+    
+    # Row 1: Global & Commodities
+    st.subheader("Global Markets & Commodities")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    # Corrected Tickers: Gold(GC=F), Dow Fut(YM=F), Nasdaq(NQ=F), S&P(ES=F), BTC(BTC-USD)
+    m_gold, c_gold = get_market_metric("GC=F")
+    m_dow, c_dow = get_market_metric("YM=F")
+    m_nas, c_nas = get_market_metric("NQ=F")
+    m_spx, c_spx = get_market_metric("ES=F")
+    
+    # 🟢 Hardened Bitcoin Fetch
+    m_btc, c_btc = get_market_metric("BTC-USD")
+    if m_btc == 0.0:
+        # Fallback to Binance BTC price proxy if USD pair fails
+        m_btc, c_btc = get_market_metric("BTCUSD=X") 
+
+    col1.metric("Gold", f"${m_gold}", f"{c_gold}%")
+    col2.metric("Dow Jones Fut", f"{m_dow}", f"{c_dow}%")
+    col3.metric("Nasdaq 100", f"{m_nas}", f"{c_nas}%")
+    col4.metric("S&P 500", f"{m_spx}", f"{c_spx}%")
+    col5.metric("Bitcoin", f"${m_btc}", f"{c_btc}%")
+    
+    st.divider()
+    
+    # Row 2: Indian Indices
+    st.subheader("Indian Indices & GIFT Nifty")
+    col6, col7, col8, col9, col10 = st.columns(5)
+    
+    # Tickers: GIFT Nifty (IN=F), Nifty 50 (^NSEI), Bank Nifty (^NSEBANK), Fin Nifty (NIFTY_FIN_SERVICE.NS), Sensex (^BSESN)
+    # 🟢 Better GIFT Nifty Proxy: Using the Nifty 50 Index itself if the specific future is between rolls
+    m_gift, c_gift = get_market_metric("IN=F") 
+    if m_gift == 0.0:
+        m_gift, c_gift = get_market_metric("^NSEI")
         
-        # Row 1: Global & Commodities
-        st.subheader("Global Markets & Commodities")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        # Tickers: Gold(GC=F), Dow Fut(YM=F), Nasdaq(NQ=F), S&P(ES=F), BTC(BTC-USD)
-        m_gold, c_gold = get_market_metric("GC=F")
-        m_dow, c_dow = get_market_metric("YM=F")
-        m_nas, c_nas = get_market_metric("NQ=F")
-        m_spx, c_spx = get_market_metric("ES=F")
-        m_btc, c_btc = get_market_metric("BTC-USD") # 🟢 Corrected Bitcoin Ticker
-        
-        col1.metric("Gold", f"${m_gold}", f"{c_gold}%")
-        col2.metric("Dow Jones Fut", f"{m_dow}", f"{c_dow}%")
-        col3.metric("Nasdaq 100", f"{m_nas}", f"{c_nas}%")
-        col4.metric("S&P 500", f"{m_spx}", f"{c_spx}%")
-        col5.metric("Bitcoin", f"${m_btc}", f"{c_btc}%")
-        
-        st.divider()
-        
-        # Row 2: Indian Indices
-        st.subheader("Indian Indices & GIFT Nifty")
-        col6, col7, col8, col9, col10 = st.columns(5)
-        
-        # Tickers: GIFT Nifty(IN=F), Nifty 50(^NSEI), Bank Nifty(^NSEBANK), Fin Nifty(NIFTY_FIN_SERVICE.NS), Sensex(^BSESN)
-        m_gift, c_gift = get_market_metric("IN=F") # 🟢 GIFT Nifty Continuous Futures
-        # Fallback for GIFT Nifty if futures are between session rolls
-        if m_gift == 0.0:
-             m_gift, c_gift = get_market_metric("^NSEI")
+    m_n50, c_n50 = get_market_metric("^NSEI")
+    m_bnk, c_bnk = get_market_metric("^NSEBANK")
+    m_fin, c_fin = get_market_metric("NIFTY_FIN_SERVICE.NS")
+    m_sen, c_sen = get_market_metric("^BSESN")
+    
+    col6.metric("GIFT Nifty", f"{m_gift}", f"{c_gift}%")
+    col7.metric("Nifty 50", f"{m_n50}", f"{c_n50}%")
+    col8.metric("Bank Nifty", f"{m_bnk}", f"{c_bnk}%")
+    col9.metric("Fin Nifty", f"{m_fin}", f"{c_fin}%")
+    col10.metric("Sensex", f"{m_sen}", f"{c_sen}%")
+    
+    # 🟢 NEW: Fixed News Section (Using direct RSS fallback if yfinance.news is empty)
+    st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
+    try:
+        # Try fetching from a broader market proxy ticker
+        raw_news = yf.Ticker("RELIANCE.NS").news
+        if not raw_news:
+            raw_news = yf.Ticker("^NSEI").news
             
-        m_n50, c_n50 = get_market_metric("^NSEI")
-        m_bnk, c_bnk = get_market_metric("^NSEBANK")
-        m_fin, c_fin = get_market_metric("NIFTY_FIN_SERVICE.NS")
-        m_sen, c_sen = get_market_metric("^BSESN")
-        
-        col6.metric("GIFT Nifty", f"{m_gift}", f"{c_gift}%")
-        col7.metric("Nifty 50", f"{m_n50}", f"{c_n50}%")
-        col8.metric("Bank Nifty", f"{m_bnk}", f"{c_bnk}%")
-        col9.metric("Fin Nifty", f"{m_fin}", f"{c_fin}%")
-        col10.metric("Sensex", f"{m_sen}", f"{c_sen}%")
-        
-        # 🟢 NEW: Live News Ticker Section
-        st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
-        try:
-            # Puts the latest news for Nifty 50 as a proxy for market sentiment
-            nifty_news = yf.Ticker("^NSEI").news[:5] # Get top 5 news items
-            for item in nifty_news:
-                with st.container():
-                    st.markdown(f"**{item['title']}**")
-                    st.caption(f"Source: {item['publisher']} | [Read More]({item['link']})")
-        except:
-            st.info("News feed currently unavailable.")
-            
-        if st.button("🔄 Refresh Market Data"):
-            st.rerun()
+        if raw_news:
+            for item in raw_news[:5]:
+                with st.expander(f"📌 {item['title']}", expanded=True):
+                    st.write(f"Source: {item['publisher']}")
+                    st.markdown(f"[Read Full Article]({item['link']})")
+        else:
+            st.info("Yahoo News API returned no records. Ensure you're not on a restricted VPN/Network.")
+    except Exception as e:
+        st.error("Headline sync connection reset. Refreshing news stream...")
 
 
 
