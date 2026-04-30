@@ -205,31 +205,31 @@ def main():
 
 import streamlit as st
 
-# 🟢 BLOCK-PROOF LIVE NEWS WIDGET
-st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
-
-# Corrected TradingView News Widget
-tv_widget = """
-<div class="tradingview-widget-container">
-  <div class="tradingview-widget-container__widget"></div>
-  <script type="text/javascript" src="https://tradingview.com" async>
-  {
-  "feedMode": "all_symbols",
-  "isStandard": true,
-  "colorTheme": "dark",
-  "displayMode": "regular",
-  "width": "100%",
-  "height": 500,
-  "locale": "in"
-}
-  </script>
-</div>
-"""
-
-# Render the widget
-st.components.v1.html(tv_widget, height=520)
-
-st.info("💡 Data provided by TradingView Real-Time Feed")
+    # 🟢 BLOCK-PROOF LIVE NEWS WIDGET
+    st.markdown("<div class='slbl'>📰 Real-Time Market Wire</div>", unsafe_allow_html=True)
+    
+    # Corrected TradingView News Widget
+    tv_widget = """
+    <div class="tradingview-widget-container">
+      <div class="tradingview-widget-container__widget"></div>
+      <script type="text/javascript" src="https://tradingview.com" async>
+      {
+      "feedMode": "all_symbols",
+      "isStandard": true,
+      "colorTheme": "dark",
+      "displayMode": "regular",
+      "width": "100%",
+      "height": 500,
+      "locale": "in"
+    }
+      </script>
+    </div>
+    """
+    
+    # Render the widget
+    st.components.v1.html(tv_widget, height=520)
+    
+    st.info("💡 Data provided by TradingView Real-Time Feed")
 
             
     with tab_screener:
