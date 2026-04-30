@@ -316,8 +316,13 @@ def main():
                     
                     try:
                         ticker_data = yf.Ticker(f"{symbol}.NS")
-                        hist_6m = ticker_data.history(period="6m")
-                        
+                        hist_6m = ticker_data.history(period="6mo") # 🟢 Corrected Period
+                        if not hist_6mo.empty and len(hist_6mo) > 1:
+                            # 1. Safe Cumulative Return Calculation
+                            start_px = hist_6mo['Close'].iloc[0]
+                            end_px = hist_6mo['Close'].iloc[-1]
+                            stock_ret = round(((end_px - start_px) / start_px) * 100, 2)   
+                             
                         if not hist_6m.empty:
                             # Calculate Stock Cumulative Return
                             start_px = hist_6m['Close'].iloc[0]
@@ -367,7 +372,9 @@ def main():
                             ])
                             fig.update_layout(xaxis_rangeslider_visible=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
                                               font=dict(color='#a8b4cc'), height=300, margin=dict(l=0, r=0, t=10, b=10))
-                            st.plotly_chart(fig, width='stretch')
+                            st.plotly_chart(fig, width='stretch') # 🟢 Corrected Width
+                            except Exception as e:
+                            st.warning(f"Data sync failed for {symbol}: {e}")
                             
                     except Exception:
                         continue
@@ -417,7 +424,7 @@ def main():
                     height=600,
                     margin=dict(l=10, r=10, t=50, b=10)
                 )
-                st.plotly_chart(fig_hm, use_container_width=True)
+                st.plotly_chart(fig_hm, width='stretch')
                 
             except Exception as e:
                 st.error(f"Plotly could not build the tree. Error: {e}")
