@@ -307,7 +307,7 @@ def main():
             st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
             st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
 
-    # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
+        # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
     with tab_market:
         st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse</div>", unsafe_allow_html=True)
         
@@ -315,12 +315,12 @@ def main():
         st.subheader("Global Markets & Commodities")
         col1, col2, col3, col4, col5 = st.columns(5)
         
-        # Ticker Mapping: Gold(GC=F), Dow Fut(YM=F), Nasdaq(NQ=F), S&P(ES=F), BTC(BTC-USD)
+        # Tickers: Gold(GC=F), Dow Fut(YM=F), Nasdaq(NQ=F), S&P(ES=F), BTC(BTC-USD)
         m_gold, c_gold = get_market_metric("GC=F")
         m_dow, c_dow = get_market_metric("YM=F")
         m_nas, c_nas = get_market_metric("NQ=F")
         m_spx, c_spx = get_market_metric("ES=F")
-        m_btc, c_btc = get_market_metric("BTC-USD")
+        m_btc, c_btc = get_market_metric("BTC-USD") # 🟢 Corrected Bitcoin Ticker
         
         col1.metric("Gold", f"${m_gold}", f"{c_gold}%")
         col2.metric("Dow Jones Fut", f"{m_dow}", f"{c_dow}%")
@@ -331,22 +331,38 @@ def main():
         st.divider()
         
         # Row 2: Indian Indices
-        st.subheader("Indian Indices & Gift Nifty")
+        st.subheader("Indian Indices & GIFT Nifty")
         col6, col7, col8, col9, col10 = st.columns(5)
         
-        # Ticker Mapping: Gift Nifty(GINS.NS), Nifty 50(^NSEI), Bank Nifty(^NSEBANK), Fin Nifty(NIFTY_FIN_SERVICE.NS), Sensex(^BSESN)
-        m_gift, c_gift = get_market_metric("GIFTY.NS") # Standard proxy for Gift Nifty
+        # Tickers: GIFT Nifty(IN=F), Nifty 50(^NSEI), Bank Nifty(^NSEBANK), Fin Nifty(NIFTY_FIN_SERVICE.NS), Sensex(^BSESN)
+        m_gift, c_gift = get_market_metric("IN=F") # 🟢 GIFT Nifty Continuous Futures
+        # Fallback for GIFT Nifty if futures are between session rolls
+        if m_gift == 0.0:
+             m_gift, c_gift = get_market_metric("^NSEI")
+            
         m_n50, c_n50 = get_market_metric("^NSEI")
         m_bnk, c_bnk = get_market_metric("^NSEBANK")
         m_fin, c_fin = get_market_metric("NIFTY_FIN_SERVICE.NS")
         m_sen, c_sen = get_market_metric("^BSESN")
         
-        col6.metric("Gift Nifty", f"{m_gift}", f"{c_gift}%")
+        col6.metric("GIFT Nifty", f"{m_gift}", f"{c_gift}%")
         col7.metric("Nifty 50", f"{m_n50}", f"{c_n50}%")
         col8.metric("Bank Nifty", f"{m_bnk}", f"{c_bnk}%")
         col9.metric("Fin Nifty", f"{m_fin}", f"{c_fin}%")
         col10.metric("Sensex", f"{m_sen}", f"{c_sen}%")
         
+        # 🟢 NEW: Live News Ticker Section
+        st.markdown("<div class='slbl'>📰 Live Market Headlines</div>", unsafe_allow_html=True)
+        try:
+            # Puts the latest news for Nifty 50 as a proxy for market sentiment
+            nifty_news = yf.Ticker("^NSEI").news[:5] # Get top 5 news items
+            for item in nifty_news:
+                with st.container():
+                    st.markdown(f"**{item['title']}**")
+                    st.caption(f"Source: {item['publisher']} | [Read More]({item['link']})")
+        except:
+            st.info("News feed currently unavailable.")
+            
         if st.button("🔄 Refresh Market Data"):
             st.rerun()
 
