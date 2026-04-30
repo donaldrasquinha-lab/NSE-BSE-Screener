@@ -115,6 +115,20 @@ def calculate_momentum_node(symbol: str, source: str, token: str = "", exchange:
     except: pass
     res["Live Price"] = round(close_px, 2)
     return res
+    
+def get_market_metric(ticker_symbol):
+    """Fetches live/last price and % change for global indices."""
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        data = ticker.history(period="2d")
+        if len(data) >= 2:
+            close_px = data['Close'].iloc[-1]
+            prev_close = data['Close'].iloc[-2]
+            pct_change = ((close_px - prev_close) / prev_close) * 100
+            return round(close_px, 2), round(pct_change, 2)
+    except:
+        pass
+    return 0.0, 0.0
 
 # ===========================================================================
 #  MAIN APP LAYOUT
@@ -127,7 +141,9 @@ def main():
     if 'auto_run' not in st.session_state: st.session_state['auto_run'] = False
 
     st.markdown("<div class='hdr'><h1>NSE + BSE Multibagger Screener</h1></div>", unsafe_allow_html=True)
-    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap = st.tabs(["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub (Charts)", "🗺️ Sector Heatmap"])
+    
+    tab_screener, tab_db, tab_momentum, tab_charts, tab_heatmap, tab_market = st.tabs(["Screener", "Database", "Momentum Strategy", "🎯 Momentum Hub", "🗺️ Sector Heatmap", "🌐 Market Plus"])
+
 
     with tab_screener:
         token_input = st.text_input("Enter Upstox Access Token (v2)", type="password")
@@ -290,6 +306,51 @@ def main():
             
             st.markdown("<div class='slbl'>Raw Database Sorted by Sector</div>", unsafe_allow_html=True)
             st.dataframe(df_full.sort_values(by='Sector').reset_index(drop=True), use_container_width=True)
+
+    # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
+    with tab_market:
+        st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse</div>", unsafe_allow_html=True)
+        
+        # Row 1: Global & Commodities
+        st.subheader("Global Markets & Commodities")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        # Ticker Mapping: Gold(GC=F), Dow Fut(YM=F), Nasdaq(NQ=F), S&P(ES=F), BTC(BTC-USD)
+        m_gold, c_gold = get_market_metric("GC=F")
+        m_dow, c_dow = get_market_metric("YM=F")
+        m_nas, c_nas = get_market_metric("NQ=F")
+        m_spx, c_spx = get_market_metric("ES=F")
+        m_btc, c_btc = get_market_metric("BTC-USD")
+        
+        col1.metric("Gold", f"${m_gold}", f"{c_gold}%")
+        col2.metric("Dow Jones Fut", f"{m_dow}", f"{c_dow}%")
+        col3.metric("Nasdaq 100", f"{m_nas}", f"{c_nas}%")
+        col4.metric("S&P 500", f"{m_spx}", f"{c_spx}%")
+        col5.metric("Bitcoin", f"${m_btc}", f"{c_btc}%")
+        
+        st.divider()
+        
+        # Row 2: Indian Indices
+        st.subheader("Indian Indices & Gift Nifty")
+        col6, col7, col8, col9, col10 = st.columns(5)
+        
+        # Ticker Mapping: Gift Nifty(GINS.NS), Nifty 50(^NSEI), Bank Nifty(^NSEBANK), Fin Nifty(NIFTY_FIN_SERVICE.NS), Sensex(^BSESN)
+        m_gift, c_gift = get_market_metric("GIFTY.NS") # Standard proxy for Gift Nifty
+        m_n50, c_n50 = get_market_metric("^NSEI")
+        m_bnk, c_bnk = get_market_metric("^NSEBANK")
+        m_fin, c_fin = get_market_metric("NIFTY_FIN_SERVICE.NS")
+        m_sen, c_sen = get_market_metric("^BSESN")
+        
+        col6.metric("Gift Nifty", f"{m_gift}", f"{c_gift}%")
+        col7.metric("Nifty 50", f"{m_n50}", f"{c_n50}%")
+        col8.metric("Bank Nifty", f"{m_bnk}", f"{c_bnk}%")
+        col9.metric("Fin Nifty", f"{m_fin}", f"{c_fin}%")
+        col10.metric("Sensex", f"{m_sen}", f"{c_sen}%")
+        
+        if st.button("🔄 Refresh Market Data"):
+            st.rerun()
+
+
 
 if __name__ == "__main__":
     main()
