@@ -18,6 +18,7 @@ import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
 
+from streamlit_autorefresh import st_autorefresh
 # ===========================================================================
 #  CONFIG & HARDCODED INDICES
 # ===========================================================================
