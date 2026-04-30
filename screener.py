@@ -314,7 +314,7 @@ def main():
         
         st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
         
-         # Row 1: Global & Commodities
+        # Row 1: Global & Commodities
         st.subheader("Global Markets & Commodities")
         col1, col2, col3, col4, col5 = st.columns(5)
         
