@@ -225,8 +225,8 @@ def main():
         """
         
         # Render the widget
-        st.components.v1.html(tv_widget, height=520)
-        st.info("💡 Data provided by TradingView Real-Time Feed")
+            st.components.v1.html(tv_widget, height=520)
+            st.info("💡 Data provided by TradingView Real-Time Feed")
 
             
     with tab_screener:
