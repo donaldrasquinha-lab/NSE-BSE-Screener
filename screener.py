@@ -309,7 +309,7 @@ def main():
 
 # --- 🌐 TAB 6: MARKET PLUS DASHBOARD ---
     with tab_market:
-         # 🟢 Auto-refresh every 60 seconds
+        # 🟢 Auto-refresh every 60 seconds
         st_autorefresh(interval=60 * 1000, key="market_refresh")
         
         st.markdown("<div class='slbl'>🌐 Global & Indian Market Pulse (Live Auto-Sync)</div>", unsafe_allow_html=True)
