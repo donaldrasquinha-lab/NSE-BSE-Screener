@@ -227,8 +227,8 @@ def main():
         </div>
         """
         
-    # Render with enough height to prevent internal scrolling issues
-        components.html(news_html, height=520, scrolling=False)
+        # Render with enough height to prevent internal scrolling issues
+            components.html(news_html, height=520, scrolling=False)
 
 
             
