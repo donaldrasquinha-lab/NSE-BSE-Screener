@@ -373,7 +373,7 @@ def main():
                             fig.update_layout(xaxis_rangeslider_visible=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
                                               font=dict(color='#a8b4cc'), height=300, margin=dict(l=0, r=0, t=10, b=10))
                             st.plotly_chart(fig, width='stretch') # 🟢 Corrected Width
-                            except Exception as e:
+                        except Exception as e:
                             st.warning(f"Data sync failed for {symbol}: {e}")
                             
                     except Exception:
