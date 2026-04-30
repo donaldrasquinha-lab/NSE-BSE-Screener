@@ -154,7 +154,7 @@ def main():
             "🌍 Brent Crude hits $126/barrel following US-Iran naval threats.",
             "🌍 US Fed holds rates at 3.5–3.75% in Powell's final meeting."
         ]
-        ticker_text = " • ".join(financial_news)
+    ticker_text = " • ".join(financial_news)
         
     # CSS/HTML for the ticker
     ticker_html = f"""
