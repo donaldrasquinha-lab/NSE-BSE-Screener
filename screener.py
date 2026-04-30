@@ -202,44 +202,49 @@ def main():
         i5.metric("Sensex", f"{sen_p}", f"{sen_c}%")
     
     st_autorefresh(interval=60 * 1000, key="news_pulse")
-              # 🟢 TICKER NEWS ENGINE (Tab 6)
-    st.markdown("<div class='slbl'>📰 Live Ticker Headlines</div>", unsafe_allow_html=True)
+                 # 🟢 HIGH-AVAILABILITY NEWS ENGINE (Tab 6)
+    st.markdown("<div class='slbl'>📰 Live Market Pulse</div>", unsafe_allow_html=True)
     
-    try:
-        # Puts the latest news for Nifty 50 Index (Broad Market Context)
-        ticker_obj = yf.Ticker("^NSEI")
-        raw_news_list = ticker_obj.news
+    import feedparser # Add to top of file
+    import re
+
+    def get_live_news():
+        # Source 1: Google News RSS (Indian Markets)
+        # Source 2: Economic Times Markets
+        feeds = [
+            "https://google.com",
+            "https://indiatimes.com"
+        ]
         
-        # Verify if list is actually populated
-        if isinstance(raw_news_list, list) and len(raw_news_list) > 0:
-            for item in raw_news_list[:5]:
-                # Extracting keys with fallbacks for newer API versions
-                title = item.get('title') or item.get('headline') or "Market Update"
-                source = item.get('publisher') or item.get('source') or "Financial Feed"
-                link = item.get('link') or item.get('url') or "#"
-                
-                # Check for timestamp if available
-                ts = item.get('providerPublishTime')
-                time_str = f" | {pd.to_datetime(ts, unit='s').strftime('%H:%M')}" if ts else ""
+        all_news = []
+        for url in feeds:
+            try:
+                feed = feedparser.parse(url)
+                for entry in feed.entries[:5]:
+                    # Clean out HTML tags from titles/summaries
+                    clean_title = re.sub('<[^<]+?>', '', entry.title)
+                    all_news.append({
+                        "title": clean_title,
+                        "link": entry.link,
+                        "source": entry.get('source', {}).get('title', 'Market News')
+                    })
+                if all_news: break # Stop if first feed works
+            except:
+                continue
+        return all_news
 
-                with st.container(border=True):
-                    st.markdown(f"**{title}**")
-                    st.caption(f"Source: {source}{time_str}")
-                    if link != "#":
-                        st.markdown(f"[Read Article]({link})")
-        else:
-            # If API returns an empty list, try a high-volume constituent as fallback
-            reliance_news = yf.Ticker("RELIANCE.NS").news
-            if reliance_news:
-                for item in reliance_news[:3]:
-                    st.markdown(f"📌 **{item.get('title')}**")
-                    st.caption(f"Source: {item.get('publisher')}")
-            else:
-                st.info("News feed is temporarily empty. Updates will appear shortly.")
-                
-    except Exception as e:
-        st.warning("Headlines are currently being synchronized by the provider.")
-
+    # Execution
+    news_items = get_live_news()
+    
+    if news_items:
+        for item in news_items:
+            with st.container(border=True):
+                st.markdown(f"**{item['title']}**")
+                # Clean up display of source
+                st.caption(f"Source: {item['source']}")
+                st.markdown(f"[Read Full Story]({item['link']})")
+    else:
+        st.info("News stream is currently synchronizing. Updates appear every 60 seconds.")
 
             
     with tab_screener:
