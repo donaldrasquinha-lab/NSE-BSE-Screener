@@ -204,9 +204,6 @@ def display_vertical_news_ticker():
     st.markdown(ticker_css, unsafe_allow_html=True)
 
 display_vertical_news_ticker()
-        
-
-display_vertical_news_ticker()
 
 # ===========================================================================
 #  MAIN APP LAYOUT
