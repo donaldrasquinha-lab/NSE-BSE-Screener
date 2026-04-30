@@ -200,7 +200,8 @@ def main():
         i3.metric("Bank Nifty", f"{bnk_p}", f"{bnk_c}%")
         i4.metric("Fin Nifty", f"{fin_p}", f"{fin_c}%")
         i5.metric("Sensex", f"{sen_p}", f"{sen_c}%")
-        
+    
+    st_autorefresh(interval=60 * 1000, key="news_pulse")
               # 🟢 TICKER NEWS ENGINE (Tab 6)
     st.markdown("<div class='slbl'>📰 Live Ticker Headlines</div>", unsafe_allow_html=True)
     
