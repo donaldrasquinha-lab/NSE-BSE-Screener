@@ -323,7 +323,7 @@ def main():
             "IN=F": ["IN=F", "^NSEI", "NIFTY50.NS"]
         }
         
-        tickers_to_try = fallbacks.get(ticker_symbol, [ticker_symbol])
+    tickers_to_try = fallbacks.get(ticker_symbol, [ticker_symbol])
         
         for symbol in tickers_to_try:
             try:
